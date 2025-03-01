@@ -5,7 +5,22 @@ library(dplyr)
 library(jsonlite)
 library(lubridate)
 
+get_github_repositories <- function(username) {
+  # Указание URL страницы
+  url <- paste0("https://github.com/", username, "?tab=repositories")
 
+  # Чтение HTML-кода страницы
+  webpage <- read_html(url)
+
+  # Извлечение названий репозиториев
+  repos_list <- webpage %>%
+    html_nodes("a[itemprop='name codeRepository']") %>%  # Указание CSS-селектора для извлечения ссылок на репозитории
+    html_text()  # Получение текста из найденных узлов
+
+  # Печать списка репозиториев
+  cleaned_list <- gsub("[\n ]", "", repos_list)
+  return(cleaned_list)
+}
 clone_and_log_repository <- function(userName, repoName) {
   # Формирование ссылки репозитория
   repoPath <- paste0("https://github.com/", userName, "/", repoName)
