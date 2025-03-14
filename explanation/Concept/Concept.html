@@ -3158,6 +3158,32 @@ ul.task-list{list-style: none;}
 
 <p>Поведенческий профиль разработчика создаётся на основе его коммитов в репозитории своего профиля (по умолчанию - за год)</p>
 
+</article></slide><slide class=""><hgroup><h2>Архитектура</h2></hgroup><article  id="архитектура">
+
+<p><span style="color:#515151">
+ Форма представления проекта: </span> shiny-приложение</p>
+
+<p>Проект разделён на две части: серверную часть (server) и часть графического представления (ui)</p>
+
+<ul>
+<li><span style="color:#515151">
+ server </span>
+
+<ul>
+<li>ETL.R - функции, относящиеся к этапу ETL</li>
+<li>ML.R - функции, относящиеся к этапу машинного обучения</li>
+<li>server.R - серверная часть приложения</li>
+</ul></li>
+<li><span style="color:#515151">
+ ui </span>
+
+<ul>
+<li>ui.R - графическая часть приложения</li>
+</ul></li>
+<li><span style="color:#515151">
+ app.R </span> - подключение серверной части и части графического представления</li>
+</ul>
+
 </article></slide><slide class="segue dark nobackground level1"><hgroup class = 'auto-fadein'><h2>Фаза ETL данных</h2></hgroup><article  id="фаза-etl-данных">
 
 </article></slide><slide class=""><hgroup><h2>Извлечение информации о коммитах</h2></hgroup><article  id="извлечение-информации-о-коммитах">
