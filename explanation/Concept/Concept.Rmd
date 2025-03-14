@@ -41,6 +41,16 @@ knitr::opts_chunk$set(echo = FALSE)
   + ui.R - графическая часть приложения 
 * <span style="color:#515151"> app.R </span> - подключение серверной части и части графического представления  
 
+## Стек технологий
+
+Будут использованы следующие технологии: 
+
+* Backend: R 
+* Frontend: Shiny
+* Data processing: dplyr, purrr, httr, dummy
+* Визуализация: ggplot2, plotly, heatmaps
+* ML: PCA
+* Интеграции: GitHub API v3
 
 # Фаза ETL данных
 
