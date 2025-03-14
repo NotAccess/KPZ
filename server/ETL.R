@@ -2,7 +2,7 @@ library(httr)
 library(dplyr)
 library(purrr)
 
-GITHUB_TOKEN <- ""
+GITHUB_TOKEN <- "github_pat_*"
 
 github_api_get <- function(url) {
   if (!is.null(GITHUB_TOKEN)) {
