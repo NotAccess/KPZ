@@ -42,7 +42,7 @@
 - Установленный RStudio (рекомендуется, но не обязательно)
 - Установленные пакеты:
   ```R
-  install.packages(c("shiny", "httr", "dplyr", "purrr", "DT", "shinycssloaders", "plotly", "ggplot2", "tidyr", "fastDummies", "shinyjs"))
+  install.packages(c("shiny", "httr", "dplyr", "purrr", "DT", "shinycssloaders", "plotly", "ggplot2", "tidyr", "fastDummies", "shinyjs", "shinyBS"))
   ```
 
 ### Инструкция:
