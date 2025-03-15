@@ -2,7 +2,7 @@ library(httr)
 library(dplyr)
 library(purrr)
 
-GITHUB_TOKEN <- "github_pat_*"
+GITHUB_TOKEN <- ""
 
 github_api_get <- function(url) {
   # обработка запросов к GitHub API по URL
@@ -11,21 +11,21 @@ github_api_get <- function(url) {
   } else {
     response <- GET(url)
   }
-  
+
   if (status_code(response) == 204) {
     message("Репозиторий не содержит данных (204 No Content).")
     return(NULL)
   }
-  
+
   if (status_code(response) == 403) {
     stop("Лимит запросов исчерпан. Пожалуйста, обновите GitHub токен.")
   }
-  
+
   if (status_code(response) == 409) {
     message("Репозиторий пустой или конфликт (409 Conflict).")
     return(NULL)
   }
-  
+
   if (status_code(response) != 200) {
     stop(paste("Ошибка при запросе к GitHub API:", status_code(response)))
   }
@@ -33,7 +33,7 @@ github_api_get <- function(url) {
   if (status_code(response) != 401) {
     stop(paste("Ошибка авторизации (проверьте токен):", status_code(response)))
   }
-  
+
   return(response)
 }
 
@@ -44,16 +44,16 @@ get_user_repos <- function(username, setProgress = NULL) {
 
   total_pages <- 1
   current_page <- 1
-  
+
   repeat {
     response <- github_api_get(url)
     if (is.null(response)) {
       break
     }
-    
+
     current_repos <- content(response, "parsed")
     repos <- c(repos, current_repos)
-    
+
     if (current_page == 1) {
       link_header <- headers(response)$link
       if (!is.null(link_header)) {
@@ -64,39 +64,39 @@ get_user_repos <- function(username, setProgress = NULL) {
         }
       }
     }
-    
+
     if (!is.null(setProgress)) {
       setProgress(value = current_page / (total_pages + 1), detail = paste(current_page, "/", total_pages))
     }
-    
+
     link_header <- headers(response)$link
     if (is.null(link_header) || !grepl('rel="next"', link_header)) {
       break
     }
-    
+
     next_url <- regmatches(link_header, regexpr('<https://[^>]+>; rel="next"', link_header))
     next_url <- gsub('<|>; rel="next"', '', next_url)
     url <- next_url
     current_page <- current_page + 1
   }
-  
+
   if (length(repos) == 0) {
     return(NULL)
   }
-  
+
   if (!is.null(setProgress)) {
     setProgress(value = total_pages / (total_pages + 1), detail = "*обработка*")
   }
-  
+
   repo_data <- imap(repos, function(repo, index) {
     if (!is.null(setProgress)) {
       repo_progress <- (total_pages + (index / length(repos))) / (total_pages + 1)
       setProgress(value = repo_progress,detail = paste("*обработка*", "(", index, "/", length(repos), ")"))
     }
-    
+
     contributors_response <- github_api_get(paste0("https://api.github.com/repos/", repo$full_name, "/contributors"))
     contributors_count <- if (!is.null(contributors_response)) length(content(contributors_response, "parsed")) else 0
-    
+
     list(
       name = repo$name,
       full_name = repo$full_name,
@@ -113,7 +113,7 @@ get_user_repos <- function(username, setProgress = NULL) {
       size = repo$size
     )
   })
-  
+
   return(repo_data)
 }
 
@@ -122,7 +122,7 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
   if (is.null(repos)) {
     return(NULL)
   }
-  
+
   commits_df <- data.frame(
     id = character(),
     repo = character(),
@@ -137,36 +137,36 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
     #patch = character(),
     stringsAsFactors = FALSE
   )
-  
+
   ind <- 0
   count_commits <- 0
   for (repo in repos) {
     repo_name <- repo$full_name
     url <- paste0("https://api.github.com/repos/", repo_name, "/commits?per_page=100")
-    
+
     repeat {
       response <- github_api_get(url)
       if (is.null(response)) {
         break
       }
-      
+
       commits <- content(response, "parsed")
       count_commits <- count_commits + length(commits)
       if (length(commits) == 0) {
         break
       }
-      
+
       for (commit in commits) {
         ind <- ind + 1
-        
+
         commit_sha <- commit$sha
         commit_details <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/commits/", commit_sha))
         commit_data <- content(commit_details, "parsed")
-        
+
         if (!is.null(commit_data$files)) {
           for (file in commit_data$files) {
             commit_date <- as.POSIXct(commit_data$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-            
+
             new_row <- data.frame(
               id = commit_data$sha,
               repo = repo_name,
@@ -181,27 +181,27 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
               #patch = file$patch %||% "",
               stringsAsFactors = FALSE
             )
-            
+
             commits_df <- rbind(commits_df, new_row)
           }
         }
-        
+
         if (!is.null(setProgress)) {
           setProgress(value = ind / count_commits, detail = paste(ind, "/", count_commits))
         }
       }
-      
+
       link_header <- headers(response)$link
       if (is.null(link_header) || !grepl('rel="next"', link_header)) {
         break
       }
-      
+
       next_url <- regmatches(link_header, regexpr('<https://[^>]+>; rel="next"', link_header))
       next_url <- gsub('<|>; rel="next"', '', next_url)
       url <- next_url
     }
   }
-  
+
   if (nrow(commits_df) > 0) {
     return(commits_df)
   } else {
@@ -214,7 +214,7 @@ prepare_activity_data <- function(repos) {
   if (is.null(repos)) {
     return(NULL)
   }
-  
+
   activity_data <- map_dfr(repos, function(repo) {
     data.frame(
       date = as.Date(repo$created_at),
@@ -222,7 +222,7 @@ prepare_activity_data <- function(repos) {
       type = "Issues"
     )
   })
-  
+
   activity_data <- bind_rows(activity_data, map_dfr(repos, function(repo) {
     data.frame(
       date = as.Date(repo$updated_at),
@@ -230,7 +230,7 @@ prepare_activity_data <- function(repos) {
       type = "Forks"
     )
   }))
-  
+
   return(activity_data)
 }
 
@@ -239,7 +239,7 @@ prepare_language_data <- function(repos) {
   if (is.null(repos)) {
     return(NULL)
   }
-  
+
   language_data <- map_dfr(repos, function(repo) {
     if (!is.null(repo$language)) {
       data.frame(
@@ -248,11 +248,11 @@ prepare_language_data <- function(repos) {
       )
     }
   })
-  
+
   language_data <- language_data %>%
     group_by(language) %>%
     summarise(count = sum(count), .groups = "drop")
-  
+
   return(language_data)
 }
 
@@ -261,21 +261,21 @@ prepare_commit_heatmap_data <- function(commits) {
   if (is.null(commits)) {
     return(NULL)
   }
-  
+
   commits <- commits %>%
     distinct(id, .keep_all = TRUE) %>%
     mutate(date = as.POSIXct(date, format = "%d.%m.%Y %H:%M", tz = "UTC")) %>%
     filter(!is.na(date))
-  
+
   commits <- commits %>%
     mutate(
       day = factor(weekdays(date, abbreviate = FALSE), levels = c("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")),
       hour = as.integer(format(date, "%H"))
     )
-  
+
   heatmap_data <- commits %>%
     group_by(hour, day) %>%
     summarise(count = n(), .groups = "drop")
-  
+
   return(heatmap_data)
 }
