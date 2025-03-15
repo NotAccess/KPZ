@@ -5,6 +5,7 @@ library(purrr)
 GITHUB_TOKEN <- "github_pat_*"
 
 github_api_get <- function(url) {
+  # обработка запросов к GitHub API по URL
   if (!is.null(GITHUB_TOKEN)) {
     response <- GET(url, add_headers(Authorization = paste("token", GITHUB_TOKEN)))
   } else {
@@ -28,11 +29,16 @@ github_api_get <- function(url) {
   if (status_code(response) != 200) {
     stop(paste("Ошибка при запросе к GitHub API:", status_code(response)))
   }
+
+  if (status_code(response) != 401) {
+    stop(paste("Ошибка авторизации (проверьте токен):", status_code(response)))
+  }
   
   return(response)
 }
 
 get_user_repos <- function(username, setProgress = NULL) {
+  # получение списка репозиториев пользователя (на вход имя пользователя и progressbar)
   repos <- list()
   url <- paste0("https://api.github.com/users/", username, "/repos?per_page=100")
 
@@ -112,6 +118,7 @@ get_user_repos <- function(username, setProgress = NULL) {
 }
 
 get_user_commits_df <- function(repos, setProgress = NULL) {
+  # на основе полученных репозиториев, выдаёт таблицу с характеристиками коммитов (на вход список репозиториев и progressbar)
   if (is.null(repos)) {
     return(NULL)
   }
@@ -203,6 +210,7 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
 }
 
 prepare_activity_data <- function(repos) {
+  # на основе репозиториев, визуализирует данные о forks и issues
   if (is.null(repos)) {
     return(NULL)
   }
@@ -227,6 +235,7 @@ prepare_activity_data <- function(repos) {
 }
 
 prepare_language_data <- function(repos) {
+  # на основе репозиториев, визуализирует данные о использовании языков
   if (is.null(repos)) {
     return(NULL)
   }
@@ -248,6 +257,7 @@ prepare_language_data <- function(repos) {
 }
 
 prepare_commit_heatmap_data <- function(commits) {
+  # строит тепловую карту по дате коммита
   if (is.null(commits)) {
     return(NULL)
   }
