@@ -5,6 +5,7 @@ library(ggplot2)
 library(plotly)
 
 preprocess_commits <- function(commits) {
+  # Очистка данных
   if (is.null(commits)) {
     stop("Ошибка: commits равен NULL")
   }
@@ -14,6 +15,7 @@ preprocess_commits <- function(commits) {
 }
 
 aggregate_commits <- function(commits_dummies) {
+  # агрегация (group by) данных
   if (is.null(commits_dummies)) {
     stop("Ошибка: commits_dummies равен NULL")
   }
@@ -33,6 +35,7 @@ aggregate_commits <- function(commits_dummies) {
 }
 
 perform_pca <- function(commits, scale = TRUE) {
+  # определение главных компоненто
   if (is.null(commits)) {
     stop("Ошибка: commits равен NULL")
   }
@@ -59,6 +62,7 @@ perform_pca <- function(commits, scale = TRUE) {
 }
 
 detect_outliers <- function(pca_data, threshold = 2) {
+  # пределение аномалий (threshold - порог выброса)
   z_scores <- scale(pca_data$distance)
   
   outliers <- pca_data %>%
@@ -69,6 +73,7 @@ detect_outliers <- function(pca_data, threshold = 2) {
 }
 
 plot_pca <- function(pca_data) {
+  # отображение результатов
   if (is.null(pca_data)) {
     stop("Ошибка: pca_data равен NULL")
   }
