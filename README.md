@@ -55,29 +55,48 @@
    setwd("путь/к/папке/с/файлами")
    ```
 3. Настройте GitHub токен:
-
-  >[!IMPORTANT]
-  >
-  >Без GitHub токена работа с API будет ограничена 60 запросами/час. Для анализа пользователей с большим количеством репозиториев токен обязателен.
-  
-  - Создайте [токен](https://github.com/settings/tokens)
-  - Настройте откружение: 
-    - Отройте файл .Renviron для редактирования
-      ```bash
-      usethis::edit_r_environ('project')
+    - Создайте [токен](https://github.com/settings/tokens)
+    - Настройте откружение: 
+        - Отройте файл .Renviron для редактирования
+        
+            ```bash
+            usethis::edit_r_environ('project')
+            ```
+        - Перезапустите сессию R 
+        
+            ```bash
+            .rs.restartR()
+            ```
+        - Добавте токен в файл .Renviron
+        
+            ```bash
+            echo GITHUB_TOKEN=ваш_токен >> .Renviron
+            ```
+        - Вновь перезапустите сессию R:
+        
+            ```bash
+            .rs.restartR()
+            ```
+            
+### Инструкция:
+ 1. Склонируйте репозиторий:
+    ```bash
+    git clone https://github.com/NotAccess/KPZ
+    ```
+ 2. Установите рабочую директорию в R:
+    ```R
+    setwd("путь/к/папке/с/файлами")
+    ```
+ 3. Настройте GitHub токен (обязательно!):
+    - Создайте [токен](https://github.com/settings/tokens)
+    - Вставьте в `server/ETL.R`:
+      ```R
+      GITHUB_TOKEN <- "ваш_токен_здесь"
       ```
-    - Перезапустите сессию R 
-      ```bash
-      .rs.restartR()
-      ```
-    - Добавте токен в файл .Renviron
-      ```bash
-      echo GITHUB_TOKEN=ваш_токен >> .Renviron
-      ```
-    - Вновь перезапустите сессию R:
-      ```bash
-      .rs.restartR()
-      ```
+ 4. Запустите приложение:
+    ```R
+    shiny::runApp()
+    ```
         
 4. Запустите приложение:
    ```R
