@@ -33,13 +33,8 @@ github_api_get <- function(url) {
     stop(paste("Ошибка авторизации (проверьте токен):", status_code(response)))
   }
 
-<<<<<<< Updated upstream
   if (status_code(response) != 200) {
     stop(paste("Ошибка при запросе к GitHub API:", status_code(response)))
-=======
-  if (status_code(response) == 401) {
-    stop(paste("Ошибка авторизации (проверьте токен):", status_code(response)))
->>>>>>> Stashed changes
   }
 
   return(response)
