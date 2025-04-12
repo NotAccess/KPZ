@@ -1,11 +1,15 @@
 library(httr)
 library(dplyr)
 library(purrr)
-
-GITHUB_TOKEN <- ""
+#usethis::edit_r_environ('project')
+#.rs.restartR()
+#echo GITHUB_TOKEN=github_pat_ >> .Renviron
+##.rs.restartR()
+#Без кавычек!
+GITHUB_TOKEN <- Sys.getenv('GITHUB_TOKEN')
 github_api_get <- function(url) {
   # обработка запросов к GitHub API по URL
-  if (!is.null(GITHUB_TOKEN)) {
+  if (nzchar(GITHUB_TOKEN)) {
     response <- GET(url, add_headers(Authorization = paste("token", GITHUB_TOKEN)))
   } else {
     response <- GET(url)
