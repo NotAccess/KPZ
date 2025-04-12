@@ -29,12 +29,12 @@ github_api_get <- function(url) {
     return(NULL)
   }
 
-  if (status_code(response) != 200) {
-    stop(paste("Ошибка при запросе к GitHub API:", status_code(response)))
+  if (status_code(response) == 401) {
+    stop(paste("Ошибка авторизации (проверьте токен):", status_code(response)))
   }
 
-  if (status_code(response) != 401) {
-    stop(paste("Ошибка авторизации (проверьте токен):", status_code(response)))
+  if (status_code(response) != 200) {
+    stop(paste("Ошибка при запросе к GitHub API:", status_code(response)))
   }
 
   return(response)
