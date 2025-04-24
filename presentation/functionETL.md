@@ -3,7 +3,7 @@
 ## github_api_get
 
 ```R
-  github_api_get <- function(url) {
+github_api_get <- function(url) {
   ...
   return(response)
 }
@@ -12,11 +12,18 @@
 
 Входные данные: 
 - url - URL-адрес
+
 Выходные данные:
 - response - ответ от GitHub API
 
 ## get_user_repos
 
+```R
+get_user_repos <- function(username, setProgress = NULL) {
+  ...
+  return(repo_data)
+}
+```
 Функция предназначена для получения списка репозиториев пользователя.
 
 Входные данные: 
@@ -30,7 +37,12 @@
 
 ## get_user_commits_df
 
-
+```R
+get_user_commits_df <- function(repos, setProgress = NULL) {
+  ...
+  return(commits_df)
+}
+```
 
 Фкнкция предназначена для получения таблицы с характеристиками коммитов
 

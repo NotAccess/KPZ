@@ -74,6 +74,122 @@ knitr::include_graphics("img/github-mark.png")
     4.  Формирование тепловой карты по датам коммитов.
 :::
 
+## Программная реализация 
+::: columns-2
+::: left
+### Используемые библиотеки:
+:::
+- httr - зашрузка данных из API;
+- dplyr - очистка, преобразование и агрегирование данных, полученных из API; 
+- purrr - преобразование данных и обработка ошибок. 
+
+### Реализованные функции:
+
+- github_api_get
+- get_user_repos
+- get_user_commits_dа
+- prepare_language_data
+- prepare_commit_heatmap_data
+:::
+
+## github_api_get
+<div style="margin-left: 60px;">
+```R
+github_api_get <- function(url) {
+  ...
+  return(response)
+}
+```
+</div>
+Принимает URL GitHub API в качестве аргумента и возвращает объект ответа (response) от сервера GitHub после выполнения GET-запроса. Она также обрабатывает различные сценарии ошибок и предупреждений, связанные с API.
+
+
+Входные данные: 
+
+- url - URL-адрес
+
+Выходные данные:
+
+- response - ответ от GitHub API
+
+## get_user_repos
+<div style="margin-left: 60px;">
+```R
+get_user_repos <- function(username, setProgress = NULL) {
+  ...
+  return(repo_data)
+}
+```
+</div>
+Функция предназначена для получения списка репозиториев пользователя. Она использует API GitHub, разбивает запрос на страницы, если репозиториев много, и возвращает список с информацией о каждом репозитории.
+
+Входные данные: 
+
+- url - URL-адрес
+- setProgress (необязательный) - отображение прогресса выполнения
+
+Выходные данные:
+
+- repo_data - список информации о репозиториях пользователя
+
+## get_user_commits_df
+<div style="margin-left: 60px;">
+```R
+get_user_commits_df <- function(repos, setProgress = NULL) {
+  ...
+  return(commits_df)
+}
+```
+</div>
+Извлекает информацию о коммитах из указанных репозиториев GitHub и формирует таблицу с характеристиками каждого коммита и измененных файлов.
+
+Входные данные: 
+
+- repos - список объектов, представляющих репозитории GitHub
+- setProgress (необязательный) - отображение прогресса выполнения
+
+Выходные данные:
+
+- commits_df - data frame, содержащий информацию о коммитах.
+
+## prepare_language_data
+<div style="margin-left: 60px;">
+```R
+prepare_language_data <- function(repos) {
+  ...
+  return(language_data)
+}
+```
+</div>
+Анализирует список репозиториев и формирует сводную таблицу с информацией о языках программирования, используемых в этих репозиториях.
+
+Входные данные: 
+
+- repos - список объектов, представляющих репозитории GitHub
+
+Выходные данные:
+
+- language_data - data frame, содержащий информацию об использовании языков.
+
+## prepare_commit_heatmap_data
+<div style="margin-left: 60px;">
+```R
+prepare_commit_heatmap_data <- function(commits) {
+  ...
+  return(heatmap_data)
+}
+```
+</div>
+Подготавливает данные о коммитах для построения тепловой карты, показывающей распределение коммитов по дням недели и часам суток.
+
+Входные данные: 
+
+- commits - data frame,содержащий информацию о коммитах.
+
+Выходные данные:
+
+- heatmap_data - data frame, пригодный для построения тепловой карты.
+
 # Фаза аналитики & ML
 
 ## Обработка данных
