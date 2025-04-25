@@ -34,23 +34,44 @@ aggregate_commits <- function(commits_dummies) {
   return(aggregated_commits)
 }
 
-perform_pca <- function(commits, scale = TRUE) {
-  # определение главных компоненто
+perform_pca <- function(commits, scale = TRUE, normalize = "minmax") {
+  # Проверка входных данных
   if (is.null(commits)) {
     stop("Ошибка: commits равен NULL")
   }
   
+  # Предобработка и агрегация данных
   aggregated_commits <- commits %>%
     preprocess_commits() %>%
     aggregate_commits()
+  
+  # Выбор числовых столбцов
   numeric_data <- aggregated_commits %>% select(where(is.numeric))
   
   if (ncol(numeric_data) < 2) {
     stop("Ошибка: недостаточно числовых столбцов для PCA")
   }
   
+  # Нормализация числовых данных
+  if (normalize == "minmax") {
+    # Минимакс-нормализация (приведение к [0, 1])
+    numeric_data <- numeric_data %>%
+      mutate(across(.cols = everything(), 
+                    .fns = ~ (. - min(., na.rm = TRUE)) / 
+                      (max(., na.rm = TRUE) - min(., na.rm = TRUE))))
+  } else if (normalize == "zscore") {
+    # Z-нормализация (стандартизация)
+    numeric_data <- numeric_data %>%
+      mutate(across(.cols = everything(), 
+                    .fns = ~ scale(., center = TRUE, scale = TRUE)))
+  } else {
+    stop("Ошибка: неизвестный метод нормализации. Используйте 'minmax' или 'zscore'.")
+  }
+  
+  # Выполнение PCA
   pca <- prcomp(numeric_data, center = TRUE, scale. = scale)
   
+  # Подготовка данных PCA
   pca_data <- as_tibble(pca$x) %>%
     mutate(
       author = aggregated_commits$author,

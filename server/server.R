@@ -429,6 +429,7 @@ server <- function(input, output, session) {
 
   output$pca_plot <- renderPlotly({
     if (!is.null(data$commits)) {
+      #Можно указать метод нормализации
       pca_data <- perform_pca(data$commits)
       outliers <- detect_outliers(pca_data)
 
