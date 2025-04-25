@@ -97,6 +97,8 @@ get_user_repos <- function(username, setProgress = NULL) {
     contributors_count <- if (!is.null(contributors_response)) length(content(contributors_response, "parsed")) else 0
 
     list(
+      username = username,
+      avatar = current_repos$avatar_url,
       name = repo$name,
       full_name = repo$full_name,
       description = if (!is.null(repo$description)) repo$description else "Нет описания",
@@ -207,6 +209,28 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
   } else {
     return(NULL)
   }
+}
+
+get_user_profile <- function(username) {
+  response <- github_api_get(paste0("https://api.github.com/users/", username))
+  if (is.null(response)) return(NULL)
+
+  profile <- content(response, "parsed")
+
+  list(
+    name = profile$name %||% username,
+    bio = profile$bio %||% "Биография не указана",
+    avatar_url = profile$avatar_url,
+    created_at = profile$created_at,
+    updated_at = profile$updated_at,
+    company = profile$company,
+    location = profile$location,
+    followers = profile$followers,
+    following = profile$following,
+    public_repos = profile$public_repos,
+    html_url = profile$html_url,
+    blog = profile$blog
+  )
 }
 
 prepare_activity_data <- function(repos) {

@@ -15,55 +15,56 @@ filter_repos <- function(repos, filters) {
       if (filters$language != "Все" && repo$language != filters$language) {
         return(FALSE)
       }
-      
+
       if (repo$stars < filters$stars[1] || repo$stars > filters$stars[2]) {
         return(FALSE)
       }
-      
-      if (repo$created_at < filters$created_date_range[1] || 
+
+      if (repo$created_at < filters$created_date_range[1] ||
           repo$created_at > filters$created_date_range[2]) {
         return(FALSE)
       }
-      
-      if (repo$updated_at < filters$updated_date_range[1] || 
+
+      if (repo$updated_at < filters$updated_date_range[1] ||
           repo$updated_at > filters$updated_date_range[2]) {
         return(FALSE)
       }
-      
-      if (repo$open_issues < filters$issues[1] || 
+
+      if (repo$open_issues < filters$issues[1] ||
           repo$open_issues > filters$issues[2]) {
         return(FALSE)
       }
-      
-      if (repo$contributors < filters$contributors[1] || 
+
+      if (repo$contributors < filters$contributors[1] ||
           repo$contributors > filters$contributors[2]) {
         return(FALSE)
       }
-      
+
       repo_size_mb <- repo$size / 1024
       if (repo_size_mb < filters$size[1] || repo_size_mb > filters$size[2]) {
         return(FALSE)
       }
-      
+
       if (filters$license != "Все" && repo$license != filters$license) {
         return(FALSE)
       }
-      
+
       return(TRUE)
     }, .)
 }
 
 server <- function(input, output, session) {
   shinyjs::hide("filters")
-  
+
   data <- reactiveValues(
     repos = NULL,
+    user_profile = NULL,
     commits = NULL,
     activity_data = NULL,
     language_data = NULL,
     commit_heatmap_data = NULL
   )
-  
+
   observeEvent(input$toggle_filters, {
     shinyjs::toggle("filters")
     if (input$toggle_filters %% 2 == 1) {
@@ -72,7 +73,7 @@ server <- function(input, output, session) {
       updateActionButton(session, "toggle_filters", label = "Показать фильтры", icon = icon("eye"))
     }
   })
-  
+
   filters <- reactive({
     list(
       language = input$language_filter,
@@ -85,19 +86,20 @@ server <- function(input, output, session) {
       license = input$license_filter
     )
   })
-  
+
   observeEvent(input$submit_button, {
     user_text <- input$user_input
-    
-    data$repos <- NULL
+
+    data$user_profile <- NULL
     data$commits <- NULL
     data$activity_data <- NULL
     data$language_data <- NULL
     data$commit_heatmap_data <- NULL
-    
+
     withProgress(message = "Загрузка репозиториев...", {
       repos <- get_user_repos(user_text, setProgress)
       if (!is.null(repos)) {
+        data$user_profile <- get_user_profile(user_text)
         data$repos <- filter_repos(repos, filters())
         data$activity_data <- prepare_activity_data(data$repos)
         data$language_data <- prepare_language_data(data$repos)
@@ -106,7 +108,7 @@ server <- function(input, output, session) {
       }
     })
   })
-  
+
   observe({
     if (!is.null(data$repos)) {
       withProgress(message = "Загрузка коммитов...", {
@@ -120,7 +122,87 @@ server <- function(input, output, session) {
       })
     }
   })
-  
+
+  # Новый рендер для отчета
+  output$user_report <- renderUI({
+    profile <- data$user_profile
+    if (!is.null(profile)) {
+      tags$div(
+        class = "user-report",
+        style = "padding: 20px;",
+
+        tags$div(
+          class = "profile-header",
+          style = "display: flex; align-items: center; margin-bottom: 30px;",
+
+          tags$img(
+            src = profile$avatar_url,
+            style = "width: 150px; height: 150px; border-radius: 50%; margin-right: 30px;"
+          ),
+
+          tags$div(
+            tags$h1(profile$name, style = "margin: 0 0 10px 0;"),
+            tags$p(profile$bio, style = "font-size: 16px; color: #666;"),
+            tags$div(
+              style = "display: flex; gap: 15px; margin-top: 10px;",
+              tags$span(icon("users"), "Подписчиков: ", profile$followers),
+              tags$span(icon("user-plus"), "Подписок: ", profile$following),
+              tags$span(icon("database"), "Репозиториев: ", profile$public_repos)
+            )
+          )
+        ),
+
+        tags$div(
+          class = "stats-grid",
+          style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;",
+
+          # Левая колонка
+          tags$div(
+            class = "stats-column",
+            style = "background: #f8f9fa; padding: 20px; border-radius: 10px;",
+
+            tags$h3(icon("chart-line"), "Активность", style = "margin-top: 0;"),
+            tags$p(icon("calendar"), "Создан: ", format(as.Date(profile$created_at), "%d.%m.%Y")),
+            tags$p(icon("sync"), "Последняя активность: ", format(as.Date(profile$updated_at), "%d.%m.%Y")),
+            tags$p(icon("building"), "Компания: ", profile$company %||% "Не указана"),
+            tags$p(icon("map-marker"), "Локация: ", profile$location %||% "Не указана")
+          ),
+
+          # Правая колонка
+          tags$div(
+            class = "stats-column",
+            style = "background: #f8f9fa; padding: 20px; border-radius: 10px;",
+
+            tags$h3(icon("trophy"), "Достижения", style = "margin-top: 0;"),
+            tags$p(icon("star"), "Среднее звёзд на репозиторий: ", round(mean(sapply(data$repos, function(r) r$stars)), 1)),
+            tags$p(icon("code-branch"), "Среднее форков на репозиторий: ", round(mean(sapply(data$repos, function(r) r$forks)), 1)),
+            tags$p(icon("exclamation-triangle"), "Репозиториев с лицензией: ", sum(sapply(data$repos, function(r) r$license != "Нет лицензии")))
+          )
+        ),
+
+        tags$div(
+          style = "margin-top: 30px;",
+          tags$h3(icon("link"), "Ссылки"),
+          tags$a(
+            href = profile$html_url,
+            target = "_blank",
+            class = "btn btn-primary",
+            style = "margin-right: 10px;",
+            icon("github"), "Профиль GitHub"
+          )#,
+          #if (!is.null(profile$blog)) tags$a(
+          #  href = profile$blog,
+          #  target = "_blank",
+          #  class = "btn btn-success",
+          #  icon("globe"), "Веб-сайт"
+          #)
+        )
+      )
+    } else {
+      tags$p("Профиль пользователя не найден.")
+    }
+  })
+
   output$repo_info <- renderUI({
     repos <- data$repos
     if (!is.null(repos)) {
@@ -128,14 +210,14 @@ server <- function(input, output, session) {
         tags$div(
           class = "repo-card",
           style = "border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; background: #f9f9f9;",
-          
+
           # Заголовок с иконкой
           tags$div(
             style = "display: flex; align-items: center; margin-bottom: 12px;",
             tags$i(class = "fas fa-book", style = "font-size: 24px; margin-right: 8px; color: #0366d6;"),
             tags$h3(repo$name, style = "margin: 0; font-size: 24px; color: #0366d6;")
           ),
-          
+
           # Описание
           if (!is.null(repo$description) && repo$description != "") {
             tags$p(
@@ -144,11 +226,11 @@ server <- function(input, output, session) {
               repo$description
             )
           },
-          
+
           # Основные метрики
           tags$div(
             style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px;",
-            
+
             # Язык программирования
             tags$div(
               style = "background: #fff; padding: 8px; border-radius: 4px;",
@@ -158,7 +240,7 @@ server <- function(input, output, session) {
                 "Язык: ", tags$b(repo$language)
               )
             ),
-            
+
             # Звёзды
             tags$div(
               style = "background: #fff; padding: 8px; border-radius: 4px;",
@@ -168,7 +250,7 @@ server <- function(input, output, session) {
                 "Звёзды: ", tags$b(repo$stars)
               )
             ),
-            
+
             # Форки
             tags$div(
               style = "background: #fff; padding: 8px; border-radius: 4px;",
@@ -178,7 +260,7 @@ server <- function(input, output, session) {
                 "Форки: ", tags$b(repo$forks)
               )
             ),
-            
+
             # Участники
             tags$div(
               style = "background: #fff; padding: 8px; border-radius: 4px;",
@@ -189,11 +271,11 @@ server <- function(input, output, session) {
               )
             )
           ),
-          
+
           # Прогресс-бары для числовых показателей
           tags$div(
             style = "margin-bottom: 12px;",
-            
+
             # Issues
             tags$div(
               style = "margin-bottom: 8px;",
@@ -215,7 +297,7 @@ server <- function(input, output, session) {
                 )
               )
             ),
-            
+
             # Размер репозитория
             tags$div(
               style = "margin-bottom: 8px;",
@@ -238,11 +320,11 @@ server <- function(input, output, session) {
               )
             )
           ),
-          
+
           # Даты и ссылка
           tags$div(
             style = "display: flex; justify-content: space-between; align-items: center; margin-top: 12px;",
-            
+
             # Даты
             tags$div(
               style = "font-size: 12px; color: #586069;",
@@ -257,7 +339,7 @@ server <- function(input, output, session) {
                 "Обновлён: ", format(repo$updated_at, "%d.%m.%Y")
               )
             ),
-            
+
             # Ссылка
             tags$a(
               href = repo$url,
@@ -274,7 +356,7 @@ server <- function(input, output, session) {
       tags$p("Репозитории не найдены.")
     }
   })
-  
+
   output$commits_table <- renderDataTable({
     commits <- data$commits
     if (!is.null(commits)) {
@@ -283,7 +365,7 @@ server <- function(input, output, session) {
       NULL
     }
   })
-  
+
   output$activity_plot <- renderPlotly({
     if (!is.null(data$activity_data)) {
       ggplotly(
@@ -293,7 +375,7 @@ server <- function(input, output, session) {
       )
     }
   })
-  
+
   output$language_plot <- renderPlotly({
     if (!is.null(data$language_data)) {
       ggplotly(
@@ -303,7 +385,7 @@ server <- function(input, output, session) {
       )
     }
   })
-  
+
   output$commit_heatmap <- renderPlotly({
     if (!is.null(data$commit_heatmap_data)) {
       ggplotly(
@@ -314,19 +396,19 @@ server <- function(input, output, session) {
       )
     }
   })
-  
+
   output$pca_plot <- renderPlotly({
     if (!is.null(data$commits)) {
       pca_data <- perform_pca(data$commits)
       outliers <- detect_outliers(pca_data)
-      
+
       output$pca_outliers <- renderUI({
         if (nrow(outliers) > 0) {
           tags$div(
             tags$h4("Выявленные выбросы:"),
             tags$ul(
               lapply(1:nrow(outliers), function(i) {
-                tags$li(paste("ID:", outliers$id[i], 
+                tags$li(paste("ID:", outliers$id[i],
                               "| Автор:", outliers$author[i],
                               "| Расстояние:", round(outliers$distance[i], 2)))
               })
@@ -336,7 +418,7 @@ server <- function(input, output, session) {
           tags$p("Выбросы не обнаружены.")
         }
       })
-      
+
       plot_ly(
         data = pca_data,
         x = ~PC1,

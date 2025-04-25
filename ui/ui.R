@@ -127,6 +127,7 @@ ui <- fluidPage(
 
   mainPanel(
     tabsetPanel(
+      tabPanel("Отчет", icon = icon("user"), withSpinner(uiOutput("user_report"))),
       tabPanel("Репозитории", icon = icon("folder"), withSpinner(uiOutput("repo_info"))),
       tabPanel("Коммиты", icon = icon("code"), withSpinner(dataTableOutput("commits_table"))),
       tabPanel("События", icon = icon("chart-line"), withSpinner(plotlyOutput("activity_plot"))),
