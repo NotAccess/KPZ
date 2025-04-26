@@ -55,25 +55,6 @@
    setwd("путь/к/папке/с/файлами")
    ```
 3. Настройте GitHub токен:
-
-   > [!IMPORTANT]
-   > 
-   > Без GitHub токена работа с API будет ограничена 60 запросами/час. Для анализа пользователей с большим количеством репозиториев токен обязателен.
- 
-> [!NOTE]  
-> Highlights information that users should take into account, even when skimming.
-
-> [!TIP]
-> Optional information to help a user be more successful.
-
-> [!IMPORTANT]  
-> Crucial information necessary for users to succeed.
-
-> [!WARNING]  
-> Critical content demanding immediate user attention due to potential risks.
-
-> [!CAUTION]
-> Negative potential consequences of an action.
  
     - Создайте [токен](https://github.com/settings/tokens)
     - Настройте откружение, последовательно выполняя следующие команды в терминале: 
@@ -93,6 +74,8 @@
             ```bash
             .rs.restartR()
             ```
+> [!IMPORTANT]
+> Без GitHub токена работа с API будет ограничена 60 запросами/час. Для анализа пользователей с большим количеством репозиториев токен обязателен.
 
 ## Архитектура решения
 
