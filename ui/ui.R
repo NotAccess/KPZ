@@ -25,6 +25,13 @@ licenses <- c("Все", "MIT", "Apache 2.0", "GPL", "Другая")
 
 ui <- fluidPage(
   useShinyjs(),
+  tags$script(HTML("
+    $(document).on('keyup', '#user_input', function(e) {
+      if(e.keyCode == 13) {
+        $('#submit_button').click();
+      }
+    });
+  ")),
   titlePanel(texts$title),
 
   sidebarPanel(
