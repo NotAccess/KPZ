@@ -123,36 +123,6 @@ server <- function(input, output, session) {
     }
   })
 
-  output$download_report <- downloadHandler(
-    filename = function() {
-      paste0(data$user_profile$name, "_github_report.pdf")
-    },
-    content = function(file) {
-      showNotification("Идет генерация отчета...", type = "message")
-
-      # Создаем временный файл отчета
-      report_path <- tempfile(fileext = ".Rmd")
-      file.copy("report_template.Rmd", report_path)
-
-      # Параметры для отчета
-      params <- list(
-        profile = data$user_profile,
-        repos = data$repos,
-        commits = data$commits
-      )
-
-      # Рендерим отчет
-      rendered_report <- rmarkdown::render(
-        report_path,
-        output_file = file,
-        params = params,
-        envir = new.env(parent = globalenv())
-      )
-
-      return(rendered_report)
-    }
-  )
-
   # Новый рендер для отчета
   output$user_report <- renderUI({
     profile <- data$user_profile

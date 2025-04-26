@@ -1,8 +1,7 @@
 ---
 title: "Анализ Git репозиториев"
-subtitle: "Демонстрация концепции проекта и программной архитектуры"
 author: 
-date: "<br><br>Москва 2025"
+date: "<center>Москва 2025</center>"
 output: 
   ioslides_presentation:
     widescreen: true
@@ -136,12 +135,29 @@ get_user_repos <- function(username, setProgress = NULL) {
 <div style="margin-left: 60px;">
 ```R
 get_user_commits_df <- function(repos, setProgress = NULL) {
+  commits_df <- data.frame(
+    id = character(),
+    repo = character(),
+    author = character(),
+    date = as.POSIXct(character()),
+    filename = character(),
+    status = character(),
+    additions = numeric(),
+    deletions = numeric(),
+    changes = numeric(),
+    message = character(),
+    branch = character(),  # добавляем поле для ветки
+    stringsAsFactors = FALSE
+  )
   ...
   return(commits_df)
 }
 ```
 </div>
-Извлекает информацию о коммитах из указанных репозиториев GitHub и формирует таблицу с характеристиками каждого коммита и измененных файлов.
+
+------------------------------------------------------------------------
+
+Извлекает информацию о коммитах из всех веток указанных репозиториев GitHub и формирует таблицу с характеристиками каждого коммита и измененных файлов.
 
 Входные данные: 
 
@@ -180,6 +196,7 @@ prepare_commit_heatmap_data <- function(commits) {
 }
 ```
 </div>
+
 Подготавливает данные о коммитах для построения тепловой карты, показывающей распределение коммитов по дням недели и часам суток.
 
 Входные данные: 
@@ -202,9 +219,10 @@ prepare_commit_heatmap_data <- function(commits) {
 ### Нормализация данных, поэтапно:
 
 1.  С помощью dummy, признаки разбиваются с категориальных на некатегориальные;
-2.  Агрегация по сумме данных о коммитах;
-3.  Определение главных компонентов;
-4.  Определение аномалий по порогу выброса.
+2.  Агрегация данных о коммитах;
+3.  Нормализация методом MinMax;
+4.  Определение главных компонентов;
+5.  Определение аномалий по порогу выброса.
 :::
 
 # Фаза визуализации
@@ -219,6 +237,34 @@ prepare_commit_heatmap_data <- function(commits) {
 ```{r, out.width = "450px", out.height= "450px", fig.cap= "", echo=FALSE}
 
 knitr::include_graphics("img/Shiny_hex_logo.png")
+```
+:::
+
+------------------------------------------------------------------------
+
+::: centered
+Автоотчёт
+:::
+
+::: centered
+```{r, out.width = "800px", out.height= "450px", fig.cap= "", echo=FALSE}
+
+knitr::include_graphics("img/export.png")
+```
+:::
+
+# Документация
+
+------------------------------------------------------------------------
+
+::: centered
+Документация в README
+:::
+
+::: centered
+```{r, out.width = "600px", out.height= "450px", fig.cap= "", echo=FALSE}
+
+knitr::include_graphics("img/readme.png")
 ```
 :::
 

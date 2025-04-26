@@ -16,6 +16,10 @@ github_api_get <- function(url) {
     return(NULL)
   }
 
+  if (status_code(response) == 401) {
+    stop(paste("Ошибка авторизации (проверьте токен):", status_code(response)))
+  }
+
   if (status_code(response) == 403) {
     stop("Лимит запросов исчерпан. Пожалуйста, обновите GitHub токен.")
   }
@@ -25,8 +29,9 @@ github_api_get <- function(url) {
     return(NULL)
   }
 
-  if (status_code(response) == 401) {
-    stop(paste("Ошибка авторизации (проверьте токен):", status_code(response)))
+  if (status_code(response) >= 500 && status_code(response) < 600) {
+    message("Ошибка сервера.")
+    return(NULL)
   }
 
   if (status_code(response) != 200) {
@@ -124,7 +129,7 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
   if (is.null(repos)) {
     return(NULL)
   }
-  
+
   commits_df <- data.frame(
     id = character(),
     repo = character(),
@@ -139,12 +144,12 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
     branch = character(),  # добавляем поле для ветки
     stringsAsFactors = FALSE
   )
-  
+
   ind <- 0
   count_commits <- 0
   for (repo in repos) {
     repo_name <- repo$full_name
-    
+
     # Получаем список всех веток репозитория
     branches_url <- paste0("https://api.github.com/repos/", repo_name, "/branches?per_page=100")
     branches_response <- github_api_get(branches_url)
@@ -152,34 +157,34 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
       next
     }
     branches <- content(branches_response, "parsed")
-    
+
     for (branch in branches) {
       branch_name <- branch$name
       url <- paste0("https://api.github.com/repos/", repo_name, "/commits?per_page=100&sha=", branch_name)
-      
+
       repeat {
         response <- github_api_get(url)
         if (is.null(response)) {
           break
         }
-        
+
         commits <- content(response, "parsed")
         count_commits <- count_commits + length(commits)
         if (length(commits) == 0) {
           break
         }
-        
+
         for (commit in commits) {
           ind <- ind + 1
-          
+
           commit_sha <- commit$sha
           commit_details <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/commits/", commit_sha))
           commit_data <- content(commit_details, "parsed")
-          
+
           if (!is.null(commit_data$files)) {
             for (file in commit_data$files) {
               commit_date <- as.POSIXct(commit_data$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-              
+
               new_row <- data.frame(
                 id = commit_data$sha,
                 repo = repo_name,
@@ -194,28 +199,28 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
                 branch = branch_name,  # добавляем имя ветки
                 stringsAsFactors = FALSE
               )
-              
+
               commits_df <- rbind(commits_df, new_row)
             }
           }
-          
+
           if (!is.null(setProgress)) {
             setProgress(value = ind / count_commits, detail = paste(ind, "/", count_commits))
           }
         }
-        
+
         link_header <- headers(response)$link
         if (is.null(link_header) || !grepl('rel="next"', link_header)) {
           break
         }
-        
+
         next_url <- regmatches(link_header, regexpr('<https://[^>]+>; rel="next"', link_header))
         next_url <- gsub('<|>; rel="next"', '', next_url)
         url <- next_url
       }
     }
   }
-  
+
   if (nrow(commits_df) > 0) {
     return(commits_df)
   } else {
