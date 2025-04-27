@@ -25,6 +25,7 @@ licenses <- c("Все", "MIT", "Apache 2.0", "GPL", "Другая")
 
 ui <- fluidPage(
   useShinyjs(),
+  titlePanel(texts$title),
   tags$script(HTML("
     $(document).on('keyup', '#user_input', function(e) {
       if(e.keyCode == 13) {
@@ -32,7 +33,6 @@ ui <- fluidPage(
       }
     });
   ")),
-  titlePanel(texts$title),
 
   sidebarPanel(
     # Поле ввода пользователя
@@ -59,8 +59,8 @@ ui <- fluidPage(
         dateRangeInput(
           "created_date_range",
           label = tags$span(icon("plus-circle"), texts$created_date_label),
-          start = Sys.Date() - 365,
-          end = Sys.Date(),
+          start = "2008-04-10", # дата начала работы GitHub
+          end = Sys.Date() + 1,
           format = "dd.mm.yyyy",
           language = "ru"
         ),
@@ -68,7 +68,7 @@ ui <- fluidPage(
           "updated_date_range",
           label = tags$span(icon("sync"), texts$updated_date_label),
           start = Sys.Date() - 365,
-          end = Sys.Date(),
+          end = Sys.Date() + 1,
           format = "dd.mm.yyyy",
           language = "ru"
         )

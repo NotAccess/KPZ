@@ -4,80 +4,68 @@ library(fastDummies)
 library(ggplot2)
 library(plotly)
 
-preprocess_commits <- function(commits) {
-  # Очистка данных
-  if (is.null(commits)) {
-    stop("Ошибка: commits равен NULL")
-  }
-  
-  commits$file_extension <- tools::file_ext(commits$filename)
-  return(dummy_cols(commits, select_columns = c("repo", "status", "file_extension"), remove_selected_columns = TRUE))
-}
-
-aggregate_commits <- function(commits_dummies) {
-  # агрегация (group by) данных
-  if (is.null(commits_dummies)) {
-    stop("Ошибка: commits_dummies равен NULL")
-  }
-  
-  aggregated_commits <- commits_dummies %>%
-    group_by(id, author) %>%
-    summarise(
-      additions = sum(additions, na.rm = TRUE),
-      deletions = sum(deletions, na.rm = TRUE),
-      changes = sum(changes, na.rm = TRUE),
-      files_changed = n(),
-      across(starts_with("repo_") | starts_with("status_") | starts_with("file_extension_"), sum),
-      .groups = "drop"
-    )
-  
-  return(aggregated_commits)
-}
-
-perform_pca <- function(commits, scale = TRUE, normalize = "minmax") {
+perform_pca <- function(commits, scale = TRUE) {
   # Проверка входных данных
   if (is.null(commits)) {
     stop("Ошибка: commits равен NULL")
   }
   
-  # Предобработка и агрегация данных
-  aggregated_commits <- commits %>%
-    preprocess_commits() %>%
-    aggregate_commits()
+  DUMMY_COLUMNS <- c("repo", "status", "file_extension")
+  META_COLUMNS <- c("id", "author")
   
-  # Выбор числовых столбцов
-  numeric_data <- aggregated_commits %>% select(where(is.numeric))
+  # Предобработка данных
+  preprocess_data <- function(data) {
+    data %>%
+      mutate(file_extension = tools::file_ext(filename)) %>%
+      fastDummies::dummy_cols(
+        select_columns = DUMMY_COLUMNS,
+        remove_selected_columns = TRUE,
+        ignore_na = TRUE
+      )
+  }
+  
+  # Агрегация данных
+  aggregate_data <- function(data) {
+    dummy_features <- paste0(DUMMY_COLUMNS, "_")
+    
+    data %>%
+      group_by(across(all_of(META_COLUMNS))) %>%
+      summarise(
+        additions = sum(additions, na.rm = TRUE),
+        deletions = sum(deletions, na.rm = TRUE),
+        changes = sum(changes, na.rm = TRUE),
+        files_changed = n(),
+        across(starts_with(dummy_features), sum, na.rm = TRUE),
+        .groups = "drop"
+      )
+  }
+  
+  # Основной пайплайн обработки
+  processed_data <- commits %>%
+    preprocess_data() %>%
+    aggregate_data()
+  
+  # Выделение числовых данных
+  numeric_data <- commits %>%
+    preprocess_commits() %>%
+    aggregate_commits() %>%
+    select(-all_of(META_COLUMNS)) %>%
+    select(where(is.numeric)) %>%
+    select(where(~ sd(.x, na.rm = TRUE) > 0)) # Выбираем столбцы с ненулевой дисперсией
   
   if (ncol(numeric_data) < 2) {
     stop("Ошибка: недостаточно числовых столбцов для PCA")
   }
   
-  # Нормализация числовых данных
-  if (normalize == "minmax") {
-    # Минимакс-нормализация (приведение к [0, 1])
-    numeric_data <- numeric_data %>%
-      mutate(across(.cols = everything(), 
-                    .fns = ~ (. - min(., na.rm = TRUE)) / 
-                      (max(., na.rm = TRUE) - min(., na.rm = TRUE))))
-  } else if (normalize == "zscore") {
-    # Z-нормализация (стандартизация)
-    numeric_data <- numeric_data %>%
-      mutate(across(.cols = everything(), 
-                    .fns = ~ scale(., center = TRUE, scale = TRUE)))
-  } else {
-    stop("Ошибка: неизвестный метод нормализации. Используйте 'minmax' или 'zscore'.")
-  }
+  # Вычисление PCA
+  pca_result <- prcomp(numeric_data, center = TRUE, scale. = scale)
   
-  # Выполнение PCA
-  pca <- prcomp(numeric_data, center = TRUE, scale. = scale)
-  
-  # Подготовка данных PCA
-  pca_data <- as_tibble(pca$x) %>%
-    mutate(
-      author = aggregated_commits$author,
-      id = aggregated_commits$id,
-      distance = sqrt(PC1^2 + PC2^2)
-    )
+  # Формирование итоговых данных
+  pca_data <- bind_cols(
+    processed_data[META_COLUMNS],
+    as_tibble(pca_result$x),
+    distance = sqrt(rowSums(pca_result$x^2))
+  )
   
   return(pca_data)
 }

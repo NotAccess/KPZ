@@ -10,47 +10,19 @@ source("server/ETL.R")
 source("server/ML.R")
 
 filter_repos <- function(repos, filters) {
-  repos %>%
-    Filter(function(repo) {
-      if (filters$language != "Все" && repo$language != filters$language) {
-        return(FALSE)
-      }
-
-      if (repo$stars < filters$stars[1] || repo$stars > filters$stars[2]) {
-        return(FALSE)
-      }
-
-      if (repo$created_at < filters$created_date_range[1] ||
-          repo$created_at > filters$created_date_range[2]) {
-        return(FALSE)
-      }
-
-      if (repo$updated_at < filters$updated_date_range[1] ||
-          repo$updated_at > filters$updated_date_range[2]) {
-        return(FALSE)
-      }
-
-      if (repo$open_issues < filters$issues[1] ||
-          repo$open_issues > filters$issues[2]) {
-        return(FALSE)
-      }
-
-      if (repo$contributors < filters$contributors[1] ||
-          repo$contributors > filters$contributors[2]) {
-        return(FALSE)
-      }
-
-      repo_size_mb <- repo$size / 1024
-      if (repo_size_mb < filters$size[1] || repo_size_mb > filters$size[2]) {
-        return(FALSE)
-      }
-
-      if (filters$license != "Все" && repo$license != filters$license) {
-        return(FALSE)
-      }
-
-      return(TRUE)
-    }, .)
+  keep(repos, ~ {
+    repo <- .
+    all(
+      (filters$language == "Все" || repo$language == filters$language),
+      between(repo$stars, filters$stars[1], filters$stars[2]),
+      between(as.Date(repo$created_at), as.Date(filters$created_date_range[1]), as.Date(filters$created_date_range[2])),
+      between(as.Date(repo$updated_at), as.Date(filters$updated_date_range[1]), as.Date(filters$updated_date_range[2])),
+      between(repo$open_issues, filters$issues[1], filters$issues[2]),
+      between(repo$contributors, filters$contributors[1], filters$contributors[2]),
+      between(repo$size/1024, filters$size[1], filters$size[2]),
+      (filters$license == "Все" || repo$license == filters$license)
+    )
+  })
 }
 
 server <- function(input, output, session) {
@@ -97,10 +69,11 @@ server <- function(input, output, session) {
     data$commit_heatmap_data <- NULL
 
     withProgress(message = "Загрузка репозиториев...", {
-      repos <- get_user_repos(user_text, setProgress)
-      if (!is.null(repos)) {
+      data$repos <- get_user_repos(user_text, setProgress) %>%
+        filter_repos(filters())
+      
+      if (!is.null(data$repos)) {
         data$user_profile <- get_user_profile(user_text)
-        data$repos <- filter_repos(repos, filters())
         data$activity_data <- prepare_activity_data(data$repos)
         data$language_data <- prepare_language_data(data$repos)
       } else {
@@ -198,9 +171,7 @@ server <- function(input, output, session) {
           )
         )
       )
-    } else {
-      tags$p("Профиль пользователя не найден.")
-    }
+    } else { }
   })
 
   output$repo_info <- renderUI({
@@ -352,9 +323,7 @@ server <- function(input, output, session) {
           )
         )
       })
-    } else {
-      tags$p("Репозитории не найдены.")
-    }
+    } else { }
   })
 
   output$commits_table <- renderDataTable({
@@ -399,7 +368,6 @@ server <- function(input, output, session) {
 
   output$pca_plot <- renderPlotly({
     if (!is.null(data$commits)) {
-      #Можно указать метод нормализации
       pca_data <- perform_pca(data$commits)
       outliers <- detect_outliers(pca_data)
 

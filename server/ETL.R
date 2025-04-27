@@ -110,8 +110,8 @@ get_user_repos <- function(username, setProgress = NULL) {
       language = if (!is.null(repo$language)) repo$language else "Не указан",
       stars = repo$stargazers_count,
       forks = repo$forks_count,
-      created_at = as.POSIXct(repo$created_at, format = "%Y-%m-%dT%H:%M:%SZ"),
-      updated_at = as.POSIXct(repo$updated_at, format = "%Y-%m-%dT%H:%M:%SZ"),
+      created_at = as.POSIXct(repo$created_at, format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+      updated_at = as.POSIXct(repo$updated_at, format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
       url = repo$html_url,
       open_issues = repo$open_issues_count,
       contributors = contributors_count,
@@ -189,7 +189,7 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
                 id = commit_data$sha,
                 repo = repo_name,
                 author = commit_data$commit$author$name,
-                date = format(commit_date, "%d.%m.%Y %H:%M:%S"),
+                date = format(commit_date, "%Y.%m.%d %H:%M:%S"),
                 filename = file$filename,
                 status = file$status,
                 additions = file$additions %||% 0,
@@ -235,7 +235,7 @@ get_user_profile <- function(username) {
   profile <- content(response, "parsed")
 
   list(
-    name = profile$name %||% username,
+    name = profile$login,
     bio = profile$bio %||% "Биография не указана",
     avatar_url = profile$avatar_url,
     created_at = profile$created_at,
@@ -305,7 +305,7 @@ prepare_commit_heatmap_data <- function(commits) {
 
   commits <- commits %>%
     distinct(id, .keep_all = TRUE) %>%
-    mutate(date = as.POSIXct(date, format = "%d.%m.%Y %H:%M", tz = "UTC")) %>%
+    mutate(date = as.POSIXct(date, format = "%Y.%m.%d %H:%M", tz = "UTC")) %>%
     filter(!is.na(date))
 
   commits <- commits %>%
