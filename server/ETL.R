@@ -1,6 +1,8 @@
 library(httr)
 library(dplyr)
 library(purrr)
+library(duckdb)
+library(DBI)
 
 GITHUB_TOKEN <- Sys.getenv('GITHUB_TOKEN')
 github_api_get <- function(url) {
@@ -129,103 +131,136 @@ get_user_repos <- function(username, setProgress = NULL) {
 }
 
 get_user_commits_df <- function(repos, setProgress = NULL) {
-  # на основе полученных репозиториев, выдаёт таблицу с характеристиками коммитов
-  # на вход список репозиториев и progressbar
-  if (is.null(repos)) {
-    return(NULL)
-  }
-
+  # Initialize DuckDB connection
+  con <- dbConnect(duckdb::duckdb(), "KPZ.db") # Use in-memory database; replace with file path for persistence
+  on.exit(dbDisconnect(con), add = TRUE) # Ensure connection closes on exit
+  
+  # Create table in DuckDB if it doesn't exist
+  dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS commits (
+      id VARCHAR,
+      repo VARCHAR,
+      author VARCHAR,
+      date VARCHAR,
+      filename VARCHAR,
+      status VARCHAR,
+      additions INTEGER,
+      deletions INTEGER,
+      changes INTEGER,
+      message VARCHAR,
+      branch VARCHAR
+    )
+  ")
+  
+  # Initialize data frame for commits
   commits_df <- data.frame(
     id = character(),
     repo = character(),
     author = character(),
-    date = as.POSIXct(character()),
+    date = character(),
     filename = character(),
     status = character(),
     additions = numeric(),
     deletions = numeric(),
     changes = numeric(),
     message = character(),
-    branch = character(),  # добавляем поле для ветки
+    branch = character(),
     stringsAsFactors = FALSE
   )
-
+  
+  if (is.null(repos)) {
+    return(NULL)
+  }
+  
   ind <- 0
   count_commits <- 0
   for (repo in repos) {
     repo_name <- repo$full_name
-
-    # Получаем список всех веток репозитория
+    
+    # Get list of all branches
     branches_url <- paste0("https://api.github.com/repos/", repo_name, "/branches?per_page=100")
     branches_response <- github_api_get(branches_url)
     if (is.null(branches_response)) {
       next
     }
     branches <- content(branches_response, "parsed")
-
+    
     for (branch in branches) {
       branch_name <- branch$name
       url <- paste0("https://api.github.com/repos/", repo_name, "/commits?per_page=100&sha=", branch_name)
-
+      
       repeat {
         response <- github_api_get(url)
         if (is.null(response)) {
           break
         }
-
+        
         commits <- content(response, "parsed")
         count_commits <- count_commits + length(commits)
         if (length(commits) == 0) {
           break
         }
-
+        
         for (commit in commits) {
           ind <- ind + 1
-
           commit_sha <- commit$sha
-          commit_details <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/commits/", commit_sha))
-          commit_data <- content(commit_details, "parsed")
-
-          if (!is.null(commit_data$files)) {
-            for (file in commit_data$files) {
-              commit_date <- as.POSIXct(commit_data$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-
-              new_row <- data.frame(
-                id = commit_data$sha,
-                repo = repo_name,
-                author = commit_data$commit$author$name,
-                date = format(commit_date, "%Y.%m.%d %H:%M:%S"),
-                filename = file$filename,
-                status = file$status,
-                additions = file$additions %||% 0,
-                deletions = file$deletions %||% 0,
-                changes = file$changes %||% 0,
-                message = commit_data$commit$message,
-                branch = branch_name,  # добавляем имя ветки
-                stringsAsFactors = FALSE
-              )
-
-              commits_df <- rbind(commits_df, new_row)
+          
+          # Check if commit SHA exists in DuckDB
+          query <- sprintf("SELECT * FROM commits WHERE id = '%s'", commit_sha)
+          existing_commit <- dbGetQuery(con, query)
+          
+          if (nrow(existing_commit) > 0) {
+            # Use data from DuckDB
+            commits_df <- rbind(commits_df, existing_commit)
+          } else {
+            # Fetch commit details from GitHub API
+            commit_details <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/commits/", commit_sha))
+            commit_data <- content(commit_details, "parsed")
+            
+            if (!is.null(commit_data$files)) {
+              for (file in commit_data$files) {
+                commit_date <- as.POSIXct(commit_data$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
+                
+                new_row <- data.frame(
+                  id = commit_data$sha,
+                  repo = repo_name,
+                  author = commit_data$commit$author$name,
+                  date = format(commit_date, "%Y.%m.%d %H:%M:%S"),
+                  filename = file$filename,
+                  status = file$status,
+                  additions = file$additions %||% 0,
+                  deletions = file$deletions %||% 0,
+                  changes = file$changes %||% 0,
+                  message = commit_data$commit$message,
+                  branch = branch_name,  # добавляем имя ветки
+                  stringsAsFactors = FALSE
+                )
+                
+                # Append to data frame
+                commits_df <- rbind(commits_df, new_row)
+                
+                # Insert into DuckDB
+                dbWriteTable(con, "commits", new_row, append = TRUE)
+              }
             }
           }
-
+          
           if (!is.null(setProgress)) {
             setProgress(value = ind / count_commits, detail = paste(ind, "/", count_commits))
           }
         }
-
         link_header <- headers(response)$link
         if (is.null(link_header) || !grepl('rel="next"', link_header)) {
           break
         }
-
+        
         next_url <- regmatches(link_header, regexpr('<https://[^>]+>; rel="next"', link_header))
         next_url <- gsub('<|>; rel="next"', '', next_url)
         url <- next_url
       }
     }
   }
-
+  
   if (nrow(commits_df) > 0) {
     return(commits_df)
   } else {
