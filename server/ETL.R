@@ -23,6 +23,11 @@ github_api_get <- function(url) {
   if (status_code(response) == 403) {
     stop("Лимит запросов исчерпан. Пожалуйста, обновите GitHub токен.")
   }
+  
+  if (status_code(response) == 404) {
+    message("Пользователь GitHub с данным именем не найден.")
+    return(NULL)
+  }
 
   if (status_code(response) == 409) {
     message("Репозиторий пустой или конфликт (409 Conflict).")

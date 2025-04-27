@@ -75,27 +75,9 @@ detect_outliers <- function(pca_data, threshold = 2) {
   z_scores <- scale(pca_data$distance)
   
   outliers <- pca_data %>%
+    mutate(z_score = as.numeric(z_scores)) %>%
     filter(z_scores > threshold) %>%
-    select(id, author, distance)
+    select(id, author, distance, z_score)
   
   return(outliers)
-}
-
-plot_pca <- function(pca_data) {
-  # отображение результатов
-  if (is.null(pca_data)) {
-    stop("Ошибка: pca_data равен NULL")
-  }
-  
-  plot_ly(
-    data = pca_data,
-    x = ~PC1,
-    y = ~PC2,
-    color = ~author,
-    text = ~paste("ID:", id, "<br>PC1:", round(PC1, 2), "<br>PC2:", round(PC2, 2)),
-    hoverinfo = "text",
-    type = "scatter",
-    mode = "markers"
-  ) %>%
-    layout(title = "Анализ коммитов методом главных компонент (PCA)")
 }

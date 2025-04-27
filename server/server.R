@@ -96,7 +96,6 @@ server <- function(input, output, session) {
     }
   })
 
-  # Новый рендер для отчета
   output$user_report <- renderUI({
     profile <- data$user_profile
     if (!is.null(profile)) {
@@ -369,24 +368,6 @@ server <- function(input, output, session) {
   output$pca_plot <- renderPlotly({
     if (!is.null(data$commits)) {
       pca_data <- perform_pca(data$commits)
-      outliers <- detect_outliers(pca_data)
-
-      output$pca_outliers <- renderUI({
-        if (nrow(outliers) > 0) {
-          tags$div(
-            tags$h4("Выявленные выбросы:"),
-            tags$ul(
-              lapply(1:nrow(outliers), function(i) {
-                tags$li(paste("ID:", outliers$id[i],
-                              "| Автор:", outliers$author[i],
-                              "| Расстояние:", round(outliers$distance[i], 2)))
-              })
-            )
-          )
-        } else {
-          tags$p("Выбросы не обнаружены.")
-        }
-      })
 
       plot_ly(
         data = pca_data,
@@ -397,8 +378,249 @@ server <- function(input, output, session) {
         hoverinfo = "text",
         type = "scatter",
         mode = "markers"
-      ) %>%
-        layout(title = "Анализ коммитов методом главных компонент (PCA)")
+      ) %>% layout()
+    }
+  })
+  
+  output$outlier_cards <- renderUI({
+    req(data$commits)
+    outliers <- detect_outliers(perform_pca(data$commits))
+    
+    if (!is.null(outliers) && nrow(outliers) > 0) {
+      # Группируем коммиты по ID
+      outlier_commits <- merge(outliers, data$commits, by = "id") %>% 
+        group_by(id, author.x) %>%
+        summarise(
+          date = first(date),
+          message = first(message),
+          branch = first(branch),
+          repo = first(repo),
+          files_changed = n_distinct(filename),
+          additions = sum(additions, na.rm = TRUE),
+          deletions = sum(deletions, na.rm = TRUE),
+          distance = first(distance),
+          z_score = first(z_score),
+          .groups = "drop"
+        ) %>%
+        arrange(desc(z_score))
+      
+      lapply(1:nrow(outlier_commits), function(i) {
+        commit <- outlier_commits[i,]
+        commit_url <- paste0("https://github.com/", commit$repo, "/commit/", commit$id)
+        
+        # Определение цветов для z-score
+        z_color <- case_when(
+          commit$z_score >= 3 ~ list(
+            bg = "#FFEBEE",   # Светло-красный фон
+            border = "#FF5252", # Ярко-красная граница
+            text = "#D32F2F",  # Темно-красный текст
+            label = "🔥 Критично"
+          ),
+          commit$z_score >= 2 ~ list(
+            bg = "#FFF3E0",   # Светло-оранжевый фон
+            border = "#FF9100", # Ярко-оранжевая граница
+            text = "#EF6C00",  # Темно-оранжевый текст
+            label = "⚠️ Высокий"
+          ),
+          TRUE ~ list(
+            bg = "#E8F5E9",   # Светло-зеленый фон
+            border = "#43A047", # Зеленая граница
+            text = "#2E7D32",  # Темно-зеленый текст
+            label = "✅ Норма"
+          )
+        )
+        
+        tags$div(
+          class = "commit-card",
+          style = paste(
+            "border: 1px solid #e1e4e8;",
+            "border-radius: 12px;",
+            "padding: 16px;",
+            "margin-bottom: 16px;",
+            "background: linear-gradient(to right, #fff 95%, #fdd 100%);",
+            "box-shadow: 0 2px 6px rgba(0,0,0,0.08);",
+            "position: relative;"
+          ),
+          
+          # Лента аномалии
+          tags$div(
+            style = paste(
+              "position: absolute;",
+              "top: 0;",
+              "right: 0;",
+              "background: #d73a49;",
+              "color: white;",
+              "padding: 4px 12px;",
+              "border-radius: 0 12px 0 12px;",
+              "font-size: 0.8em;"
+            ),
+            icon("exclamation-triangle"), " Аномалия"
+          ),
+          
+          # Основной контент
+          tags$div(
+            # Заголовок
+            tags$div(
+              style = "margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;",
+              tags$a(
+                href = commit_url,
+                target = "_blank",
+                style = "text-decoration: none; color: inherit;",
+                tags$div(
+                  style = "display: flex; align-items: center; gap: 8px;",
+                  tags$span(
+                    style = paste(
+                      "font-family: monospace;",
+                      "font-weight: bold;",
+                      "color: #0366d6;",
+                      "cursor: pointer;",
+                      "text-decoration: underline;"
+                    ),
+                    paste0("ID: ", substr(commit$id, 1, 7))
+                  ),
+                  tags$span(
+                    style = "font-size: 0.9em; color: #586069;",
+                    icon("user-circle"), commit$author.x
+                  )
+                )
+              ),
+              tags$div(
+                style = "display: flex; gap: 12px; margin-top: 6px;",
+                tags$span(
+                  style = "display: flex; align-items: center; gap: 4px;",
+                  icon("code-branch"), 
+                  tags$span(style = "color: #6f42c1;", commit$branch)
+                ),
+                tags$span(
+                  style = "display: flex; align-items: center; gap: 4px;",
+                  icon("box"), 
+                  tags$span(style = "color: #28a745;", commit$repo)
+                )
+              )
+            ),
+            
+            # Метрики
+            tags$div(
+              style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px;",
+              
+              # Блок даты
+              tags$div(
+                class = "metric-card",
+                style = "display: flex; align-items: center; gap: 8px;",
+                icon("calendar", style = "color: #6a737d; font-size: 1.2em;"),
+                tags$div(
+                  tags$div(style = "font-size: 0.8em; color: #586069;", "Дата"),
+                  tags$div(style = "font-weight: 500;", format(as.POSIXct(commit$date, format = "%Y.%m.%d %H:%M:%S"), "%d.%m.%Y %H:%M:%S"))
+                )
+              ),
+              
+              # Блок файлов
+              tags$div(
+                class = "metric-card",
+                style = "display: flex; align-items: center; gap: 8px;",
+                icon("file-code", style = "color: #6a737d; font-size: 1.2em;"),
+                tags$div(
+                  tags$div(style = "font-size: 0.8em; color: #586069;", "Файлов"),
+                  tags$div(style = "font-weight: 500; color: #0366d6;", commit$files_changed)
+                )
+              ),
+              
+              # Блок изменений
+              tags$div(
+                class = "metric-card",
+                style = "display: flex; align-items: center; gap: 8px;",
+                icon("edit", style = "color: #6a737d; font-size: 1.2em;"),
+                tags$div(
+                  tags$div(style = "font-size: 0.8em; color: #586069;", "Изменения"),
+                  tags$div(
+                    style = "display: flex; gap: 6px;",
+                    tags$span(style = "color: #28a745;", paste0("+", commit$additions)),
+                    tags$span(style = "color: #d73a49;", paste0("-", commit$deletions))
+                  )
+                )
+              )
+            ),
+            
+            # Сообщение коммита
+            tags$div(
+              style = "background: #f6f8fa; padding: 12px; border-radius: 6px; margin-bottom: 12px;",
+              tags$div(
+                style = "display: flex; gap: 8px; color: #586069;",
+                icon("comment-dots"),
+                tags$em(commit$message)
+              )
+            ),
+            
+            # Метрики МГК
+            tags$div(
+              style = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px;",
+              
+              # Блок z-score
+              tags$div(
+                style = paste(
+                  "padding: 8px;",
+                  "background:", z_color$bg, ";",
+                  "border-radius: 6px;",
+                  "text-align: center;",
+                  "border: 2px solid", z_color$border, ";"
+                ),
+                tags$div(
+                  style = paste("font-size: 0.8em; color:", z_color$text, "; font-weight: 600;"),
+                  "Уровень аномалии"
+                ),
+                tags$div(
+                  style = paste("font-weight: bold; color:", z_color$text, "; font-size: 1.1em;"),
+                  round(commit$z_score, 2),
+                  tags$span(style = "margin-left: 5px;", z_color$label)
+                )
+              ),
+              
+              # Блок расстояния МГК
+              tags$div(
+                style = paste(
+                  "padding: 8px;",
+                  "background: #ffebee;",
+                  "border-radius: 6px;",
+                  "text-align: center;",
+                  "border: 1px solid #ffcdd2;"
+                ),
+                tags$div(style = "font-size: 0.8em; color: #d32f2f;", "Расстояние МГК"),
+                tags$div(style = "font-weight: bold; color: #b71c1c;", round(commit$distance, 2))
+              )
+            ),
+            
+            # Блок отчёта
+            tags$div(
+              style = paste(
+                "background: #f8f9fa;",
+                "border-left: 3px solid #0366d6;",
+                "padding: 12px;",
+                "border-radius: 6px;",
+                "margin-top: 12px;"
+              ),
+              tags$div(
+                style = "display: flex; gap: 8px; align-items: center;",
+                icon("lightbulb", style = "color: #0366d6;"),
+                tags$div(
+                  tags$div(
+                    style = "font-weight: 500; color: #0366d6; margin-bottom: 4px;",
+                    "Отчёт:"
+                  ),
+                  tags$div(
+                    style = "font-size: 0.9em; color: #586069;",
+                    "Здесь будет отображаться персонализированный отчёт..."
+                  )
+                )
+              )
+            )
+          )
+        )
+      })
+    } else {
+      tags$div(
+        style = "text-align: center; color: #586069; padding: 20px;",
+        icon("check-circle"), " Аномальных коммитов не обнаружено"
+      )
     }
   })
 }

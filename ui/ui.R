@@ -140,7 +140,36 @@ ui <- fluidPage(
       tabPanel("События", icon = icon("chart-line"), withSpinner(plotlyOutput("activity_plot"))),
       tabPanel("Языки", icon = icon("language"), withSpinner(plotlyOutput("language_plot"))),
       tabPanel("Активность", icon = icon("calendar"), withSpinner(plotlyOutput("commit_heatmap"))),
-      tabPanel("МГК", icon = icon("project-diagram"), withSpinner(plotlyOutput("pca_plot")), uiOutput("pca_outliers"))
+      tabPanel("МГК", 
+               icon = icon("project-diagram"),
+               tags$div(
+                 style = "display: flex; height: calc(100vh - 120px);",
+                 
+                 # График
+                 tags$div(
+                   style = "flex: 1 1 60%; min-width: 500px; padding-right: 12px;",
+                   withSpinner(
+                     plotlyOutput("pca_plot", height = "100%")
+                   )
+                 ),
+                 
+                 # Список карточек
+                 tags$div(
+                   style = "flex: 1 1 40%; min-width: 400px; height: 100%; overflow: hidden;",
+                   tags$div(
+                     style = "height: 100%; display: flex; flex-direction: column;",
+                     tags$div(
+                       style = "flex-shrink: 0; padding: 8px 0;",
+                       uiOutput("pca_outliers")
+                     ),
+                     tags$div(
+                       style = "flex: 1; overflow-y: auto; padding-right: 8px;",
+                       withSpinner(uiOutput("outlier_cards"))
+                     )
+                   )
+                 )
+               )
+      )
     )
   )
 )
