@@ -10,7 +10,7 @@ perform_pca <- function(commits, scale = TRUE) {
     stop("Ошибка: commits равен NULL")
   }
   
-  DUMMY_COLUMNS <- c("repo", "status", "file_extension")
+  DUMMY_COLUMNS <- c("repo", "status", "file_extension", "branch")
   META_COLUMNS <- c("id", "author")
   
   # Предобработка данных
@@ -46,9 +46,7 @@ perform_pca <- function(commits, scale = TRUE) {
     aggregate_data()
   
   # Выделение числовых данных
-  numeric_data <- commits %>%
-    preprocess_commits() %>%
-    aggregate_commits() %>%
+  numeric_data <- processed_data %>%
     select(-all_of(META_COLUMNS)) %>%
     select(where(is.numeric)) %>%
     select(where(~ sd(.x, na.rm = TRUE) > 0)) # Выбираем столбцы с ненулевой дисперсией

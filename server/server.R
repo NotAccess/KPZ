@@ -87,7 +87,7 @@ server <- function(input, output, session) {
       withProgress(message = "Загрузка коммитов...", {
         commits <- get_user_commits_df(data$repos, setProgress)
         if (!is.null(commits)) {
-          data$commits <- commits
+          data$commits <- commits %>% arrange(desc(date))
           data$commit_heatmap_data <- prepare_commit_heatmap_data(data$commits)
         } else {
           showNotification("Коммиты не найдены", type = "warning")
