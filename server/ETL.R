@@ -3,6 +3,7 @@ library(dplyr)
 library(purrr)
 library(duckdb)
 library(DBI)
+library(lubridate)
 
 GITHUB_TOKEN <- Sys.getenv('GITHUB_TOKEN')
 github_api_get <- function(url) {
@@ -49,7 +50,6 @@ github_api_get <- function(url) {
 }
 
 get_user_repos <- function(username, setProgress = NULL) {
-  # получение списка репозиториев пользователя (на вход имя пользователя и progressbar)
   repos <- list()
   url <- paste0("https://api.github.com/users/", username, "/repos?per_page=100")
 
@@ -117,8 +117,8 @@ get_user_repos <- function(username, setProgress = NULL) {
       language = if (!is.null(repo$language)) repo$language else "Не указан",
       stars = repo$stargazers_count,
       forks = repo$forks_count,
-      created_at = as.POSIXct(repo$created_at, format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
-      updated_at = as.POSIXct(repo$updated_at, format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+      created_at = as.POSIXct(repo$created_at, format = "%Y-%m-%dT%H:%M:%SZ"),
+      updated_at = as.POSIXct(repo$updated_at, format = "%Y-%m-%dT%H:%M:%SZ"),
       url = repo$html_url,
       open_issues = repo$open_issues_count,
       contributors = contributors_count,
@@ -130,15 +130,17 @@ get_user_repos <- function(username, setProgress = NULL) {
   return(repo_data)
 }
 
+DUCK_DB <- Sys.getenv('DUCK_DB')
+COMMITS_TABLE <- Sys.getenv('COMMITS_TABLE')
 get_user_commits_df <- function(repos, setProgress = NULL) {
   # Initialize DuckDB connection
-  con <- dbConnect(duckdb::duckdb(), "KPZ.db") # Use in-memory database; replace with file path for persistence
+  con <- dbConnect(duckdb(), paste0(DUCK_DB, ".db"))
   on.exit(dbDisconnect(con), add = TRUE) # Ensure connection closes on exit
   
-  # Create table in DuckDB if it doesn't exist
-  dbExecute(con, "
-    CREATE TABLE IF NOT EXISTS commits (
+  dbExecute(con, paste0("CREATE TABLE IF NOT EXISTS ", COMMITS_TABLE,
+  " (
       id VARCHAR,
+      patch VARCHAR,
       repo VARCHAR,
       author VARCHAR,
       date VARCHAR,
@@ -151,10 +153,12 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
       branch VARCHAR
     )
   ")
+  )
   
   # Initialize data frame for commits
   commits_df <- data.frame(
     id = character(),
+    patch = character(),
     repo = character(),
     author = character(),
     date = character(),
@@ -177,7 +181,6 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
   for (repo in repos) {
     repo_name <- repo$full_name
     
-    # Get list of all branches
     branches_url <- paste0("https://api.github.com/repos/", repo_name, "/branches?per_page=100")
     branches_response <- github_api_get(branches_url)
     if (is.null(branches_response)) {
@@ -205,12 +208,10 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
           ind <- ind + 1
           commit_sha <- commit$sha
           
-          # Check if commit SHA exists in DuckDB
-          query <- sprintf("SELECT * FROM commits WHERE id = '%s'", commit_sha)
+          query <- sprintf(paste0("SELECT * FROM ", COMMITS_TABLE, " WHERE id = '%s'"), commit_sha)
           existing_commit <- dbGetQuery(con, query)
           
           if (nrow(existing_commit) > 0) {
-            # Use data from DuckDB
             commits_df <- rbind(commits_df, existing_commit)
           } else {
             # Fetch commit details from GitHub API
@@ -219,20 +220,22 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
             
             if (!is.null(commit_data$files)) {
               for (file in commit_data$files) {
-                commit_date <- as.POSIXct(commit_data$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
+                commit_date <- ymd_hms(commit_data$commit$author$date)  # парсинг ISO 8601 (автоматически распознает UTC, если есть 'Z')
+                commit_date_local <- with_tz(commit_date, tzone = Sys.timezone())
                 
                 new_row <- data.frame(
                   id = commit_data$sha,
+                  patch = file$patch %||% "NULL",
                   repo = repo_name,
                   author = commit_data$commit$author$name,
-                  date = format(commit_date, "%Y.%m.%d %H:%M:%S"),
+                  date = format(commit_date_local, "%Y.%m.%d %H:%M:%S"),
                   filename = file$filename,
                   status = file$status,
                   additions = file$additions %||% 0,
                   deletions = file$deletions %||% 0,
                   changes = file$changes %||% 0,
                   message = commit_data$commit$message,
-                  branch = branch_name,  # добавляем имя ветки
+                  branch = branch_name,
                   stringsAsFactors = FALSE
                 )
                 
@@ -240,7 +243,7 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
                 commits_df <- rbind(commits_df, new_row)
                 
                 # Insert into DuckDB
-                dbWriteTable(con, "commits", new_row, append = TRUE)
+                dbWriteTable(con, COMMITS_TABLE, new_row, append = TRUE)
               }
             }
           }

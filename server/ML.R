@@ -3,9 +3,9 @@ library(tidyr)
 library(fastDummies)
 library(ggplot2)
 library(plotly)
+library(tools)
 
 perform_pca <- function(commits, scale = TRUE) {
-  # Проверка входных данных
   if (is.null(commits)) {
     stop("Ошибка: commits равен NULL")
   }
@@ -16,8 +16,8 @@ perform_pca <- function(commits, scale = TRUE) {
   # Предобработка данных
   preprocess_data <- function(data) {
     data %>%
-      mutate(file_extension = tools::file_ext(filename)) %>%
-      fastDummies::dummy_cols(
+      mutate(file_extension = file_ext(filename)) %>%
+      dummy_cols(
         select_columns = DUMMY_COLUMNS,
         remove_selected_columns = TRUE,
         ignore_na = TRUE
@@ -34,6 +34,7 @@ perform_pca <- function(commits, scale = TRUE) {
         additions = sum(additions, na.rm = TRUE),
         deletions = sum(deletions, na.rm = TRUE),
         changes = sum(changes, na.rm = TRUE),
+        patches = paste0("patch (", filename, "): ```", patch, "```;", collapse = "\n"),
         files_changed = n(),
         across(starts_with(dummy_features), sum, na.rm = TRUE),
         .groups = "drop"
@@ -61,6 +62,7 @@ perform_pca <- function(commits, scale = TRUE) {
   # Формирование итоговых данных
   pca_data <- bind_cols(
     processed_data[META_COLUMNS],
+    processed_data["patches"],
     as_tibble(pca_result$x),
     distance = sqrt(rowSums(pca_result$x^2))
   )
@@ -69,13 +71,13 @@ perform_pca <- function(commits, scale = TRUE) {
 }
 
 detect_outliers <- function(pca_data, threshold = 2) {
-  # пределение аномалий (threshold - порог выброса)
+  # Определение аномалий (threshold - порог выброса)
   z_scores <- scale(pca_data$distance)
   
   outliers <- pca_data %>%
     mutate(z_score = as.numeric(z_scores)) %>%
     filter(z_scores > threshold) %>%
-    select(id, author, distance, z_score)
+    select(id, author, distance, z_score, patches)
   
   return(outliers)
 }

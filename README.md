@@ -42,7 +42,7 @@
 - Установленный RStudio (рекомендуется, но не обязательно)
 - Установленные пакеты:
   ```R
-  install.packages(c("shiny", "httr", "dplyr", "purrr", "DT", "shinycssloaders", "plotly", "ggplot2", "tidyr", "fastDummies", "shinyjs", "shinyBS"))
+  install.packages(c("shiny", "httr", "dplyr", "purrr", "DT", "shinycssloaders", "plotly", "ggplot2", "tidyr", "fastDummies", "shinyjs", "shinyBS", "duckdb", "DBI", "litedown", "markdown", "stringr", "jsonlite", "tools", "lubridate"))
   ```
 
 ### Инструкция:
@@ -54,28 +54,34 @@
    ```R
    setwd("путь/к/папке/с/файлами")
    ```
-3. Настройте GitHub токен:
- 
-    - Создайте [токен](https://github.com/settings/tokens)
-    - Настройте откружение, последовательно выполняя следующие команды в терминале: 
-        - Откройте файл .Renviron для редактирования
-            ```bash
-            usethis::edit_r_environ('project')
-            ```
-        - Перезапустите сессию R 
-            ```bash
-            .rs.restartR()
-            ```
-        - Добавьте токен в файл .Renviron
-            ```bash
-            echo GITHUB_TOKEN=ваш_токен >> .Renviron
-            ```
-        - Вновь перезапустите сессию R:
-            ```bash
-            .rs.restartR()
-            ```
+3. Настройте переменные окружения:
+   * Откройте файл `.Renviron` для редактирования:
+     ```bash
+     usethis::edit_r_environ('project')
+     ```
+   * В открывшийся файл добавьте:
+     ```
+     GITHUB_TOKEN=`ваш_токен`
+     YANDEX_FOLDER_ID=`идентификатор_каталога`
+     YANDEX_API_KEY=`ваш_yandex_api_ключ`
+     DUCK_DB=`название_базы_данных`
+     COMMITS_TABLE=`название_таблицы_коммитов`
+     ```
+   * Активируйте настройки:
+     ```bash
+     .rs.restartR()
+     ```
+
+> [!TIP] Где взять данные:
+> - `GITHUB_TOKEN`: Создайте в [настройках GitHub](https://github.com/settings/tokens)
+> - `YANDEX_FOLDER_ID`: Идентификатор каталога в [Yandex Cloud](https://console.cloud.yandex.ru/folders)
+> - `YANDEX_API_KEY`: Создайте в сервисном аккаунте на странице каталога
+
 > [!IMPORTANT]
-> Без GitHub токена работа с API будет ограничена 60 запросами/час. Для анализа пользователей с большим количеством репозиториев токен обязателен.
+> - Без GitHub токена работа с API ограничена 60 запросами/час
+> - Все переменные из `.Renviron` должны быть указаны БЕЗ пробелов вокруг `=`
+> - Файл `.Renviron` должен находиться в корне проекта
+> - После изменения переменных всегда перезагружайте R сессию!
 
 ## Архитектура решения
 

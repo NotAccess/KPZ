@@ -59,7 +59,7 @@ ui <- fluidPage(
         dateRangeInput(
           "created_date_range",
           label = tags$span(icon("plus-circle"), texts$created_date_label),
-          start = "2008-04-10", # дата начала работы GitHub
+          start = "2008-04-10", # Дата начала работы GitHub
           end = Sys.Date() + 1,
           format = "dd.mm.yyyy",
           language = "ru"

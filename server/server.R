@@ -5,9 +5,15 @@ library(dplyr)
 library(DT)
 library(ggplot2)
 library(plotly)
+library(stringr)
+library(jsonlite)
+library(markdown)
 
 source("server/ETL.R")
 source("server/ML.R")
+
+YANDEX_FOLDER_ID <- Sys.getenv('YANDEX_FOLDER_ID')
+YANDEX_API_KEY <- Sys.getenv('YANDEX_API_KEY')
 
 filter_repos <- function(repos, filters) {
   keep(repos, ~ {
@@ -26,7 +32,7 @@ filter_repos <- function(repos, filters) {
 }
 
 server <- function(input, output, session) {
-  shinyjs::hide("filters")
+  hide("filters")
 
   data <- reactiveValues(
     repos = NULL,
@@ -38,7 +44,7 @@ server <- function(input, output, session) {
   )
 
   observeEvent(input$toggle_filters, {
-    shinyjs::toggle("filters")
+    toggle("filters")
     if (input$toggle_filters %% 2 == 1) {
       updateActionButton(session, "toggle_filters", label = "Скрыть фильтры", icon = icon("eye-slash"))
     } else {
@@ -387,11 +393,12 @@ server <- function(input, output, session) {
     outliers <- detect_outliers(perform_pca(data$commits))
     
     if (!is.null(outliers) && nrow(outliers) > 0) {
-      # Группируем коммиты по ID
+      # Группируем коммиты по (ID, author)
       outlier_commits <- merge(outliers, data$commits, by = "id") %>% 
         group_by(id, author.x) %>%
         summarise(
           date = first(date),
+          patch = first(patches),
           message = first(message),
           branch = first(branch),
           repo = first(repo),
@@ -411,21 +418,21 @@ server <- function(input, output, session) {
         # Определение цветов для z-score
         z_color <- case_when(
           commit$z_score >= 3 ~ list(
-            bg = "#FFEBEE",   # Светло-красный фон
-            border = "#FF5252", # Ярко-красная граница
-            text = "#D32F2F",  # Темно-красный текст
+            bg = "#FFEBEE",
+            border = "#FF5252",
+            text = "#D32F2F",
             label = "🔥 Критично"
           ),
           commit$z_score >= 2 ~ list(
-            bg = "#FFF3E0",   # Светло-оранжевый фон
-            border = "#FF9100", # Ярко-оранжевая граница
-            text = "#EF6C00",  # Темно-оранжевый текст
+            bg = "#FFF3E0",
+            border = "#FF9100",
+            text = "#EF6C00",
             label = "⚠️ Высокий"
           ),
           TRUE ~ list(
-            bg = "#E8F5E9",   # Светло-зеленый фон
-            border = "#43A047", # Зеленая граница
-            text = "#2E7D32",  # Темно-зеленый текст
+            bg = "#E8F5E9",
+            border = "#43A047",
+            text = "#2E7D32",
             label = "✅ Норма"
           )
         )
@@ -595,23 +602,52 @@ server <- function(input, output, session) {
                 "background: #f8f9fa;",
                 "border-left: 3px solid #0366d6;",
                 "padding: 12px;",
-                "border-radius: 6px;",
+                "border-radius: 6px 0 0 6px;",
                 "margin-top: 12px;"
               ),
               tags$div(
-                style = "display: flex; gap: 8px; align-items: center;",
-                icon("lightbulb", style = "color: #0366d6;"),
+                style = "display: flex; gap: 8px; align-items: flex-start;",
+                icon("code", style = "color: #0366d6; margin-top: 3px;"),
                 tags$div(
-                  tags$div(
-                    style = "font-weight: 500; color: #0366d6; margin-bottom: 4px;",
-                    "Отчёт:"
-                  ),
-                  tags$div(
-                    style = "font-size: 0.9em; color: #586069;",
-                    "Здесь будет отображаться персонализированный отчёт..."
+                  style = "flex-grow: 1; min-width: 0;",
+                  HTML(
+                    commit$patch %>%
+                      response_otchet() %>%
+                      format_report() %>%
+                      str_replace(
+                        pattern = "<pre><code>", 
+                        replacement = "<pre style='background: #eef4fb; padding: 12px; border-radius: 4px;'><code>"
+                      )
                   )
                 )
-              )
+              ),
+              tags$style(HTML(
+                "
+    .report-content pre {
+      background: #eef4fb;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      padding: 12px;
+      margin: 8px 0;
+      overflow-x: auto;
+      font-family: 'Fira Code', monospace;
+      font-size: 0.85em;
+    }
+    
+    .report-content code {
+      background: #eef4fb;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-family: 'Fira Code', monospace;
+    }
+    
+    .report-content pre code {
+      background: transparent;
+      padding: 0;
+      border-radius: 0;
+    }
+    "
+              ))
             )
           )
         )
@@ -623,4 +659,79 @@ server <- function(input, output, session) {
       )
     }
   })
+  
+  format_report <- function(text) {
+    text <- gsub("```r\n", "```\n", text, fixed = TRUE)
+    text <- gsub("\n", "  \n", text)
+    text <- paste0("**Отчёт:**  \n", text)
+    markdownToHTML(
+      text = text,
+      fragment.only = TRUE,
+      options = c("escape", "fragment_only")
+    ) %>% 
+      str_replace_all("&lt;", "<") %>% # Исправляем HTML-сущности
+      str_replace_all("&gt;", ">")
+  }
+  
+  response_otchet <- function(patch) {
+    prompt <- list(
+      modelUri = sprintf("gpt://%s/yandexgpt-32k", YANDEX_FOLDER_ID),
+      completionOptions = list(
+        stream = FALSE,
+        temperature = 0,
+        maxTokens = "2000",
+        reasoningOptions = list(
+          mode = "ENABLED_HIDDEN"
+        )
+      ),
+      messages = list(
+        list(
+          role = "system",
+          text = paste0("Ты получишь изменения из коммита (GitHub API patch), который был идентифицирован, как аномальный ",
+                        "(обращай на это внимание, однако помни, что коммиты могут быть и ложно-аномальными). ",
+                        "Тебе нужно составить список файлов, которые требуют отдельного/внимательного анализа (не обязательно все; ты должен быть уверен в важности анализа; стоит обращать внимание на потенциально опасные файлы), ",
+                        "а также дать краткий отчёт по типам вносимых изменений. ",
+                        "В отличие от файлов, на которые 'стоит обратить внимание', в список изменений обязательно должны попасть все файлы коммита.\n",
+                        "Типы вносимых изменения: 'Документация', 'Fix', 'Расширение', 'Вредоносный код', 'Ошибка кода', 'NULL', 'Другое'.\n",
+                        "Формат ввода:\n",
+                        "```\n",
+                        "patch ({имя_файла_1}): ```{patch_1}```;\n",
+                        "patch ({имя_файла_2}): ```{patch_2}```;\n",
+                        "...\n",
+                        "Ожидаемый формат отчёта:\n",
+                        "```\n",
+                        "Стоит обратить внимание:\n",
+                        "* `{аномальный_файл_1}`: **{на что стоит обратить внимание}**;\n",
+                        "* `{аномальный_файл_2}`: **{на что стоит обратить внимание}**;\n",
+                        "...\n",
+                        "Изменения:\n",
+                        "* `{имя_файла_1}`: **{тип_изменения}** ({объяснение (1-2 предложения)});\n",
+                        "* `{имя_файла_2}`: **{тип_изменения}** ({объяснение (1-2 предложения)});\n",
+                        "...\n",
+                        "```"
+                        )
+          ),
+        list(
+          role = "user",
+          text = patch
+        )
+      )
+    )
+    
+    response <- POST(
+      url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
+      add_headers(
+        "Content-Type" = "application/json",
+        "Authorization" = paste("Api-Key", YANDEX_API_KEY)
+      ),
+      body = toJSON(prompt, auto_unbox = TRUE, pretty = TRUE),
+      encode = "json"
+    )
+    
+    if (status_code(response) == 200) {
+      return(content(response, "parsed")$result$alternatives[[1]]$message$text)
+    } else {
+      return(paste0("ERROR: ", status_code(response)))
+    }
+  }
 }
