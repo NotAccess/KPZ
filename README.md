@@ -72,7 +72,8 @@
      .rs.restartR()
      ```
 
-> [!TIP] Где взять данные:
+> [!TIP]
+> **Где взять данные:**
 > - `GITHUB_TOKEN`: Создайте в [настройках GitHub](https://github.com/settings/tokens)
 > - `YANDEX_FOLDER_ID`: Идентификатор каталога в [Yandex Cloud](https://console.cloud.yandex.ru/folders)
 > - `YANDEX_API_KEY`: Создайте в сервисном аккаунте на странице каталога
