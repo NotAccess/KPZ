@@ -24,6 +24,51 @@ languages <- c("Все", "Python", "JavaScript", "R", "HTML", "Другой")
 licenses <- c("Все", "MIT", "Apache 2.0", "GPL", "Другая")
 
 ui <- fluidPage(
+  tags$head(
+    tags$script(HTML("
+    $(document).on('shiny:connected', function() {
+      // Добавляем выпадающий список для выбора столбца поиска
+      var columnSelect = $('<select id=\"columnSelect\" class=\"form-control\" style=\"display: inline-block; width: auto; margin-left: 10px;\">' +
+                           '<option value=\"all\">Все столбцы</option>' +
+                           '<option value=\"0\">ID</option>' +
+                           '<option value=\"1\">Patch</option>' +
+                           '<option value=\"2\">Репозиторий</option>' +
+                           '<option value=\"3\">Автор</option>' +
+                           '<option value=\"4\">Дата</option>' +
+                           '<option value=\"5\">Файл</option>' +
+                           '<option value=\"6\">Статус</option>' +
+                           '<option value=\"7\">Добавления</option>' +
+                           '<option value=\"8\">Удаления</option>' +
+                           '<option value=\"9\">Изменения</option>' +
+                           '<option value=\"10\">Сообщение</option>' +
+                           '<option value=\"11\">Ветка</option>' +
+                           '</select>');
+
+      // Вставляем выпадающий список рядом с поиском
+      $('.dataTables_filter').prepend(columnSelect);
+
+      // Обработчик изменения выбора столбца
+      $('#columnSelect').on('change', function() {
+        var table = $('.dataTable').DataTable();
+        var col = $(this).val();
+
+        if (col === 'all') {
+          table.columns().search('').draw();
+          $('.dataTables_filter input').off('keyup search');
+          $('.dataTables_filter input').on('keyup search', function() {
+            table.search(this.value).draw();
+          });
+        } else {
+          $('.dataTables_filter input').off('keyup search');
+          $('.dataTables_filter input').on('keyup search', function() {
+            table.column(col).search(this.value).draw();
+          });
+        }
+      });
+    });
+  "))
+  ),
+
   useShinyjs(),
   titlePanel(texts$title),
   tags$script(HTML("

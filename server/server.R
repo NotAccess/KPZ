@@ -90,13 +90,16 @@ server <- function(input, output, session) {
            "env_vars" = tagList(
              fluidRow(
                column(6,
+                      # Первая колонка - основные настройки
                       textInput("github_token", "GitHub Token", value = Sys.getenv("GITHUB_TOKEN")),
                       textInput("yandex_folder_id", "Yandex Folder ID", value = Sys.getenv("YANDEX_FOLDER_ID")),
-                      textInput("yandex_api_key", "Yandex API Key", value = Sys.getenv("YANDEX_API_KEY"))
-               ),
-               column(6,
+                      textInput("yandex_api_key", "Yandex API Key", value = Sys.getenv("YANDEX_API_KEY")),
                       textInput("duck_db", "DuckDB Name", value = Sys.getenv("DUCK_DB")),
                       textInput("commits_table", "Commits Table Name", value = Sys.getenv("COMMITS_TABLE"))
+               ),
+               column(6,
+                      # Вторая колонка - статистика
+                      uiOutput("github_rate_limit")
                )
              ),
              actionButton("save_env", "Сохранить настройки", icon = icon("save")),
@@ -122,13 +125,16 @@ server <- function(input, output, session) {
     tryCatch({
       # Записываем в файл .Renviron
       writeLines(env_vars, ".Renviron")
-
       # Обновляем окружение
       readRenviron(".Renviron")
 
+      # Обновляем счетчик запросов после сохранения токена
+      update_github_rate_limit()
+
       output$env_status <- renderText({
-        "Настройки успешно сохранены! Перезагрузка сессии..."
+        "Настройки успешно сохранены!"
       })
+      # Перезагрузска R сессии
       session$reload()
     }, error = function(e) {
       output$env_status <- renderText({
@@ -137,10 +143,61 @@ server <- function(input, output, session) {
     })
   })
 
-  # Показываем текущие значения переменных окружения при загрузке
-  output$env_status <- renderText({
-    "Текущие значения переменных окружения. Измените и нажмите 'Сохранить настройки'."
-  })
+  # Проверка лимита запросов
+  update_github_rate_limit <- function() {
+    token <- Sys.getenv("GITHUB_TOKEN")
+    if (nzchar(token)) {
+      tryCatch({
+        response <- GET(
+          "https://api.github.com/rate_limit",
+          add_headers(
+            Accept = "application/vnd.github+json",
+            Authorization = paste("token", token)
+          )
+        )
+
+        if (status_code(response) == 200) {
+          limits <- content(response)
+          core_limit <- limits$resources$core
+          remaining <- core_limit$remaining
+          limit <- core_limit$limit
+          reset_time <- as.POSIXct(core_limit$reset, origin = "1970-01-01")
+
+          output$github_rate_limit <- renderUI({
+            tags$div(
+              class = "rate-limit-box",
+              style = "background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;",
+              tags$h4("GitHub API Rate Limit", style = "margin-top: 0;"),
+              tags$p(
+                style = "margin-bottom: 5px;",
+                tags$b("Использовано: "),
+                sprintf("%d/%d запросов", limit - remaining, limit)
+              ),
+              tags$p(
+                style = "margin-bottom: 0;",
+                tags$b("Сброс: "),
+                format(reset_time, "%H:%M:%S")
+              )
+            )
+          })
+        }
+      }, error = function(e) {
+        output$github_rate_limit <- renderUI({
+          tags$div(
+            class = "alert alert-warning",
+            "Не удалось проверить лимит запросов GitHub API"
+          )
+        })
+      })
+    } else {
+      output$github_rate_limit <- renderUI({
+        tags$div(
+          class = "alert alert-info",
+          "Введите GitHub Token для проверки лимита запросов"
+        )
+      })
+    }
+  }
 
   hide("filters")
 
@@ -198,6 +255,7 @@ server <- function(input, output, session) {
     })
   })
 
+  # Вызов при загрузке
   observe({
     if (!is.null(data$repos)) {
       withProgress(message = "", value = 0, {
@@ -210,6 +268,7 @@ server <- function(input, output, session) {
         }
       })
     }
+    update_github_rate_limit()
   })
 
   output$user_report <- renderUI({
@@ -444,7 +503,40 @@ server <- function(input, output, session) {
   output$commits_table <- renderDataTable({
     commits <- data$commits
     if (!is.null(commits)) {
-      datatable(commits, options = list(pageLength = 10))
+      # Ограничиваем длину текста в столбце patch
+      commits$patch <- sapply(commits$patch, function(x) {
+        if (nchar(x) > 50) {
+          paste0(substr(x, 1, 50), "...")
+        } else {
+          x
+        }
+      })
+
+      datatable(
+        commits,
+        options = list(
+          pageLength = 10,
+          columnDefs = list(
+            list(targets = which(names(commits) == "patch") - 1,
+                 render = JS(
+                   "function(data, type, row, meta) {",
+                   "  return type === 'display' && data.length > 50 ?",
+                   "    '<span title=\"' + data + '\">' + data.substr(0, 50) + '...</span>' : data;",
+                   "}")
+            )
+          )
+        ),
+        filter = list(
+          position = 'top',
+          clear = FALSE,
+          options = list(
+            columns = ':not(:first-child)'
+          )
+        ),
+        extensions = 'Select',
+        selection = 'none'
+      ) %>%
+        formatStyle(columns = names(commits), fontSize = '12px')
     } else {
       NULL
     }
