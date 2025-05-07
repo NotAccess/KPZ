@@ -4,6 +4,15 @@
 
 Подробная информация содержится в [GitHub Wiki](https://github.com/NotAccess/KPZ/wiki)
 
+## Требования
+
+- Установленный R (https://www.r-project.org/) (R ≥ 4.0)
+- Установленный RStudio (рекомендуется, но не обязательно)
+- Установленные пакеты:
+  ```R
+  install.packages(c("shiny", "httr", "dplyr", "purrr", "DT", "shinycssloaders", "plotly", "ggplot2", "tidyr", "fastDummies", "shinyjs", "shinyBS", "duckdb", "DBI", "litedown", "markdown", "stringr", "jsonlite", "tools", "lubridate"))
+  ```
+
 ## Как запустить приложение
 1. Склонируйте репозиторий:
    ```bash
@@ -43,3 +52,19 @@
 > - Все переменные из `.Renviron` должны быть указаны БЕЗ пробелов вокруг `=`
 > - Файл `.Renviron` должен находиться в корне проекта
 > - После изменения переменных всегда перезагружайте R сессию!
+
+4. Запустите приложение
+   * Запуск через консоль:
+   ```bash
+     shiny::runApp()
+   ```
+   * Запуск через RStudio:
+       1. Откройте склонироавнный репозиторий в RStudio
+       2. Откройте файл app.R
+       3. Запустите файл app.R с помощью кнопки в правом верхнем углу Run ![run](presentation/img/run.png)
+
+       
+   
+   
+   
+   
