@@ -32,6 +32,116 @@ filter_repos <- function(repos, filters) {
 }
 
 server <- function(input, output, session) {
+  # Реактивные значения для текущих вкладок
+  current_main_tab <- reactiveVal("report")
+  current_settings_tab <- reactiveVal("env_vars")
+
+  # Обработчики переключения вкладок Главного меню
+  observeEvent(input$tab_report, { current_main_tab("report") })
+  observeEvent(input$tab_repos, { current_main_tab("repos") })
+  observeEvent(input$tab_commits, { current_main_tab("commits") })
+  observeEvent(input$tab_events, { current_main_tab("events") })
+  observeEvent(input$tab_languages, { current_main_tab("languages") })
+  observeEvent(input$tab_activity, { current_main_tab("activity") })
+  observeEvent(input$tab_pca, { current_main_tab("pca") })
+
+  # Обработчики переключения вкладок Настроек
+  observeEvent(input$tab_env_vars, { current_settings_tab("env_vars") })
+  observeEvent(input$tab_other_settings, { current_settings_tab("other_settings") })
+
+  # Рендеринг контента для Главного меню
+  output$main_content <- renderUI({
+    switch(current_main_tab(),
+           "report" = withSpinner(uiOutput("user_report")),
+           "repos" = withSpinner(uiOutput("repo_info")),
+           "commits" = withSpinner(dataTableOutput("commits_table")),
+           "events" = withSpinner(plotlyOutput("activity_plot")),
+           "languages" = withSpinner(plotlyOutput("language_plot")),
+           "activity" = withSpinner(plotlyOutput("commit_heatmap")),
+           "pca" = tagList(
+             tags$div(
+               style = "display: flex; height: calc(100vh - 120px);",
+               tags$div(
+                 style = "flex: 1 1 60%; min-width: 500px; padding-right: 12px;",
+                 withSpinner(plotlyOutput("pca_plot", height = "100%"))
+               ),
+               tags$div(
+                 style = "flex: 1 1 40%; min-width: 400px; height: 100%; overflow: hidden;",
+                 tags$div(
+                   style = "height: 100%; display: flex; flex-direction: column;",
+                   tags$div(
+                     style = "flex-shrink: 0; padding: 8px 0;",
+                     uiOutput("pca_outliers")
+                   ),
+                   tags$div(
+                     style = "flex: 1; overflow-y: auto; padding-right: 8px;",
+                     withSpinner(uiOutput("outlier_cards"))
+                   )
+                 )
+               )
+             )
+           )
+    )
+  })
+
+  # Рендеринг контента для Настроек
+  output$settings_content <- renderUI({
+    switch(current_settings_tab(),
+           "env_vars" = tagList(
+             fluidRow(
+               column(6,
+                      textInput("github_token", "GitHub Token", value = Sys.getenv("GITHUB_TOKEN")),
+                      textInput("yandex_folder_id", "Yandex Folder ID", value = Sys.getenv("YANDEX_FOLDER_ID")),
+                      textInput("yandex_api_key", "Yandex API Key", value = Sys.getenv("YANDEX_API_KEY"))
+               ),
+               column(6,
+                      textInput("duck_db", "DuckDB Name", value = Sys.getenv("DUCK_DB")),
+                      textInput("commits_table", "Commits Table Name", value = Sys.getenv("COMMITS_TABLE"))
+               )
+             ),
+             actionButton("save_env", "Сохранить настройки", icon = icon("save")),
+             verbatimTextOutput("env_status")
+           ),
+           "other_settings" = tagList(
+             h3("Другие настройки приложения"),
+             p("Здесь могут быть дополнительные параметры конфигурации")
+           )
+    )
+  })
+
+  # Обработчик сохранения переменных окружения
+  observeEvent(input$save_env, {
+    env_vars <- c(
+      paste0("GITHUB_TOKEN=", input$github_token),
+      paste0("YANDEX_FOLDER_ID=", input$yandex_folder_id),
+      paste0("YANDEX_API_KEY=", input$yandex_api_key),
+      paste0("DUCK_DB=", input$duck_db),
+      paste0("COMMITS_TABLE=", input$commits_table)
+    )
+
+    tryCatch({
+      # Записываем в файл .Renviron
+      writeLines(env_vars, ".Renviron")
+
+      # Обновляем окружение
+      readRenviron(".Renviron")
+
+      output$env_status <- renderText({
+        "Настройки успешно сохранены! Перезагрузка сессии..."
+      })
+      session$reload()
+    }, error = function(e) {
+      output$env_status <- renderText({
+        paste("Ошибка при сохранении настроек:", e$message)
+      })
+    })
+  })
+
+  # Показываем текущие значения переменных окружения при загрузке
+  output$env_status <- renderText({
+    "Текущие значения переменных окружения. Измените и нажмите 'Сохранить настройки'."
+  })
+
   hide("filters")
 
   data <- reactiveValues(
@@ -77,7 +187,7 @@ server <- function(input, output, session) {
     withProgress(message = "Загрузка репозиториев...", {
       data$repos <- get_user_repos(user_text, setProgress) %>%
         filter_repos(filters())
-      
+
       if (!is.null(data$repos)) {
         data$user_profile <- get_user_profile(user_text)
         data$activity_data <- prepare_activity_data(data$repos)
@@ -387,14 +497,14 @@ server <- function(input, output, session) {
       ) %>% layout()
     }
   })
-  
+
   output$outlier_cards <- renderUI({
     req(data$commits)
     outliers <- detect_outliers(perform_pca(data$commits))
-    
+
     if (!is.null(outliers) && nrow(outliers) > 0) {
       # Группируем коммиты по (ID, author)
-      outlier_commits <- merge(outliers, data$commits, by = "id") %>% 
+      outlier_commits <- merge(outliers, data$commits, by = "id") %>%
         group_by(id, author.x) %>%
         summarise(
           date = first(date),
@@ -410,11 +520,11 @@ server <- function(input, output, session) {
           .groups = "drop"
         ) %>%
         arrange(desc(z_score))
-      
+
       lapply(1:nrow(outlier_commits), function(i) {
         commit <- outlier_commits[i,]
         commit_url <- paste0("https://github.com/", commit$repo, "/commit/", commit$id)
-        
+
         # Определение цветов для z-score
         z_color <- case_when(
           commit$z_score >= 3 ~ list(
@@ -436,7 +546,7 @@ server <- function(input, output, session) {
             label = "✅ Норма"
           )
         )
-        
+
         tags$div(
           class = "commit-card",
           style = paste(
@@ -448,7 +558,7 @@ server <- function(input, output, session) {
             "box-shadow: 0 2px 6px rgba(0,0,0,0.08);",
             "position: relative;"
           ),
-          
+
           # Лента аномалии
           tags$div(
             style = paste(
@@ -463,7 +573,7 @@ server <- function(input, output, session) {
             ),
             icon("exclamation-triangle"), " Аномалия"
           ),
-          
+
           # Основной контент
           tags$div(
             # Заголовок
@@ -495,21 +605,21 @@ server <- function(input, output, session) {
                 style = "display: flex; gap: 12px; margin-top: 6px;",
                 tags$span(
                   style = "display: flex; align-items: center; gap: 4px;",
-                  icon("code-branch"), 
+                  icon("code-branch"),
                   tags$span(style = "color: #6f42c1;", commit$branch)
                 ),
                 tags$span(
                   style = "display: flex; align-items: center; gap: 4px;",
-                  icon("box"), 
+                  icon("box"),
                   tags$span(style = "color: #28a745;", commit$repo)
                 )
               )
             ),
-            
+
             # Метрики
             tags$div(
               style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px;",
-              
+
               # Блок даты
               tags$div(
                 class = "metric-card",
@@ -520,7 +630,7 @@ server <- function(input, output, session) {
                   tags$div(style = "font-weight: 500;", format(as.POSIXct(commit$date, format = "%Y.%m.%d %H:%M:%S"), "%d.%m.%Y %H:%M:%S"))
                 )
               ),
-              
+
               # Блок файлов
               tags$div(
                 class = "metric-card",
@@ -531,7 +641,7 @@ server <- function(input, output, session) {
                   tags$div(style = "font-weight: 500; color: #0366d6;", commit$files_changed)
                 )
               ),
-              
+
               # Блок изменений
               tags$div(
                 class = "metric-card",
@@ -547,7 +657,7 @@ server <- function(input, output, session) {
                 )
               )
             ),
-            
+
             # Сообщение коммита
             tags$div(
               style = "background: #f6f8fa; padding: 12px; border-radius: 6px; margin-bottom: 12px;",
@@ -557,11 +667,11 @@ server <- function(input, output, session) {
                 tags$em(commit$message)
               )
             ),
-            
+
             # Метрики МГК
             tags$div(
               style = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px;",
-              
+
               # Блок z-score
               tags$div(
                 style = paste(
@@ -581,7 +691,7 @@ server <- function(input, output, session) {
                   tags$span(style = "margin-left: 5px;", z_color$label)
                 )
               ),
-              
+
               # Блок расстояния МГК
               tags$div(
                 style = paste(
@@ -595,7 +705,7 @@ server <- function(input, output, session) {
                 tags$div(style = "font-weight: bold; color: #b71c1c;", round(commit$distance, 2))
               )
             ),
-            
+
             # Блок отчёта
             tags$div(
               style = paste(
@@ -615,7 +725,7 @@ server <- function(input, output, session) {
                       response_otchet() %>%
                       format_report() %>%
                       str_replace(
-                        pattern = "<pre><code>", 
+                        pattern = "<pre><code>",
                         replacement = "<pre style='background: #eef4fb; padding: 12px; border-radius: 4px;'><code>"
                       )
                   )
@@ -633,14 +743,14 @@ server <- function(input, output, session) {
       font-family: 'Fira Code', monospace;
       font-size: 0.85em;
     }
-    
+
     .report-content code {
       background: #eef4fb;
       padding: 2px 4px;
       border-radius: 4px;
       font-family: 'Fira Code', monospace;
     }
-    
+
     .report-content pre code {
       background: transparent;
       padding: 0;
@@ -659,7 +769,7 @@ server <- function(input, output, session) {
       )
     }
   })
-  
+
   format_report <- function(text) {
     text <- gsub("```r\n", "```\n", text, fixed = TRUE)
     text <- gsub("\n", "  \n", text)
@@ -668,11 +778,11 @@ server <- function(input, output, session) {
       text = text,
       fragment.only = TRUE,
       options = c("escape", "fragment_only")
-    ) %>% 
+    ) %>%
       str_replace_all("&lt;", "<") %>% # Исправляем HTML-сущности
       str_replace_all("&gt;", ">")
   }
-  
+
   response_otchet <- function(patch) {
     prompt <- list(
       modelUri = sprintf("gpt://%s/yandexgpt-32k", YANDEX_FOLDER_ID),
@@ -717,7 +827,7 @@ server <- function(input, output, session) {
         )
       )
     )
-    
+
     response <- POST(
       url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
       add_headers(
@@ -727,7 +837,7 @@ server <- function(input, output, session) {
       body = toJSON(prompt, auto_unbox = TRUE, pretty = TRUE),
       encode = "json"
     )
-    
+
     if (status_code(response) == 200) {
       return(content(response, "parsed")$result$alternatives[[1]]$message$text)
     } else {
