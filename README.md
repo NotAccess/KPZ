@@ -26,16 +26,17 @@
      DUCK_DB=`название_базы_данных`
      COMMITS_TABLE=`название_таблицы_коммитов`
      ```
-   * Активируйте настройки:
+   * Активируйте настройки с помощью перезагрузки R сессии:
      ```bash
      .rs.restartR()
      ```
 
 > [!TIP]
 > **Где взять данные:**
-> - `GITHUB_TOKEN`: Создайте в [настройках GitHub](https://github.com/settings/tokens)
+> - `GITHUB_TOKEN`: Создайте в [настройках GitHub](https://github.com/settings/tokens) [инструкция по созданию](https://github.com/NotAccess/KPZ/wiki/Token)
 > - `YANDEX_FOLDER_ID`: Идентификатор каталога в [Yandex Cloud](https://console.cloud.yandex.ru/folders)
 > - `YANDEX_API_KEY`: Создайте в сервисном аккаунте на странице каталога
+> - `DUCK_DB` и `COMMITS_TABLE` могут иметь любое название 
 
 > [!IMPORTANT]
 > - Без GitHub токена работа с API ограничена 60 запросами/час
