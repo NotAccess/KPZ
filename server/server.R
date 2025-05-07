@@ -184,7 +184,7 @@ server <- function(input, output, session) {
     data$language_data <- NULL
     data$commit_heatmap_data <- NULL
 
-    withProgress(message = "Загрузка репозиториев...", {
+    withProgress(message = "", value = 0, {
       data$repos <- get_user_repos(user_text, setProgress) %>%
         filter_repos(filters())
 
@@ -200,7 +200,7 @@ server <- function(input, output, session) {
 
   observe({
     if (!is.null(data$repos)) {
-      withProgress(message = "Загрузка коммитов...", {
+      withProgress(message = "", value = 0, {
         commits <- get_user_commits_df(data$repos, setProgress)
         if (!is.null(commits)) {
           data$commits <- commits %>% arrange(desc(date))

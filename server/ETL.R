@@ -49,61 +49,64 @@ github_api_get <- function(url) {
   return(response)
 }
 
-get_user_repos <- function(username, setProgress = NULL) {
+get_user_repos <- function(username, setProgress) {
   repos <- list()
   url <- paste0("https://api.github.com/users/", username, "/repos?per_page=100")
 
   total_pages <- 1
   current_page <- 1
+  start_time <- Sys.time()
+  setProgress(message = "🌐 Поиск репозиториев:", value = 0)
 
   repeat {
     response <- github_api_get(url)
-    if (is.null(response)) {
-      break
-    }
+    if (is.null(response)) break
 
     current_repos <- content(response, "parsed")
     repos <- c(repos, current_repos)
 
     if (current_page == 1) {
       link_header <- headers(response)$link
-      if (!is.null(link_header)) {
-        if (grepl('rel="last"', link_header)) {
-          last_url <- regmatches(link_header, regexpr('<https://[^>]+>; rel="last"', link_header))
-          last_url <- gsub('<|>; rel="last"', '', last_url)
-          total_pages <- as.numeric(gsub(".*page=(\\d+).*", "\\1", last_url))
-        }
+      if (!is.null(link_header) && grepl('rel="last"', link_header)) {
+        total_pages <- regexpr('<https://[^>]+>; rel="last"', link_header) %>%
+          regmatches(link_header, .) %>%
+          gsub('<|>; rel="last"', '', .) %>%
+          gsub(".*page=(\\d+).*", "\\1", .) %>%
+          as.numeric()
       }
     }
 
-    if (!is.null(setProgress)) {
-      setProgress(value = current_page / (total_pages + 1), detail = paste(current_page, "/", total_pages))
-    }
+    setProgress(detail = sprintf("%d", length(repos)))
 
     link_header <- headers(response)$link
-    if (is.null(link_header) || !grepl('rel="next"', link_header)) {
-      break
-    }
-
-    next_url <- regmatches(link_header, regexpr('<https://[^>]+>; rel="next"', link_header))
-    next_url <- gsub('<|>; rel="next"', '', next_url)
-    url <- next_url
+    if (is.null(link_header) || !grepl('rel="next"', link_header)) break
+    
+    url <- regexpr('<https://[^>]+>; rel="next"', link_header) %>%
+      regmatches(link_header, .) %>%
+      gsub('<|>; rel="next"', '', .)
     current_page <- current_page + 1
   }
 
-  if (length(repos) == 0) {
-    return(NULL)
-  }
-
-  if (!is.null(setProgress)) {
-    setProgress(value = total_pages / (total_pages + 1), detail = "*обработка*")
-  }
-
-  repo_data <- imap(repos, function(repo, index) {
-    if (!is.null(setProgress)) {
-      repo_progress <- (total_pages + (index / length(repos))) / (total_pages + 1)
-      setProgress(value = repo_progress,detail = paste("*обработка*", "(", index, "/", length(repos), ")"))
-    }
+  total_repos <- length(repos)
+  if (total_repos == 0) return(NULL)
+  
+  start_process <- Sys.time()
+  setProgress(message = "⚙️ Обработка репозиториев:", value = 0)
+  repo_data <- map(seq_along(repos), function(i) {
+    repo <- repos[[i]]
+    
+    remaining <- (Sys.time() - start_time) %>% 
+      as.numeric(units = "secs") %>% 
+      {. * (total_repos - i) / i}
+    
+    setProgress(
+      value = i / total_repos,
+      detail = sprintf(
+        "%d/%d (%s)",
+        i, total_repos,
+        format(.POSIXct(remaining, tz = "GMT"), "%H:%M:%S")
+      )
+    )
 
     contributors_response <- github_api_get(paste0("https://api.github.com/repos/", repo$full_name, "/contributors"))
     contributors_count <- if (!is.null(contributors_response)) length(content(contributors_response, "parsed")) else 0
@@ -132,7 +135,9 @@ get_user_repos <- function(username, setProgress = NULL) {
 
 DUCK_DB <- Sys.getenv('DUCK_DB')
 COMMITS_TABLE <- Sys.getenv('COMMITS_TABLE')
-get_user_commits_df <- function(repos, setProgress = NULL) {
+get_user_commits_df <- function(repos, setProgress) {
+  if (is.null(repos)) return(NULL)
+  
   # Initialize DuckDB connection
   con <- dbConnect(duckdb(), paste0(DUCK_DB, ".db"))
   on.exit(dbDisconnect(con), add = TRUE) # Ensure connection closes on exit
@@ -172,12 +177,7 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
     stringsAsFactors = FALSE
   )
   
-  if (is.null(repos)) {
-    return(NULL)
-  }
-  
-  ind <- 0
-  count_commits <- 0
+  all_commits <- c()
   for (repo in repos) {
     repo_name <- repo$full_name
     
@@ -192,6 +192,7 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
       branch_name <- branch$name
       url <- paste0("https://api.github.com/repos/", repo_name, "/commits?per_page=100&sha=", branch_name)
       
+      setProgress(message = "🌐 Поиск коммитов:", value = 0)
       repeat {
         response <- github_api_get(url)
         if (is.null(response)) {
@@ -199,59 +200,17 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
         }
         
         commits <- content(response, "parsed")
-        count_commits <- count_commits + length(commits)
-        if (length(commits) == 0) {
-          break
-        }
+        if (length(commits) == 0) break
+        all_commits <- c(all_commits, lapply(commits, function(commit) {
+          list(
+            sha = commit$sha,
+            repo_name = repo_name,
+            branch_name = branch_name
+          )
+        }))
         
-        for (commit in commits) {
-          ind <- ind + 1
-          commit_sha <- commit$sha
-          
-          query <- sprintf(paste0("SELECT * FROM ", COMMITS_TABLE, " WHERE id = '%s'"), commit_sha)
-          existing_commit <- dbGetQuery(con, query)
-          
-          if (nrow(existing_commit) > 0) {
-            commits_df <- rbind(commits_df, existing_commit)
-          } else {
-            # Fetch commit details from GitHub API
-            commit_details <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/commits/", commit_sha))
-            commit_data <- content(commit_details, "parsed")
-            
-            if (!is.null(commit_data$files)) {
-              for (file in commit_data$files) {
-                commit_date <- ymd_hms(commit_data$commit$author$date)  # парсинг ISO 8601 (автоматически распознает UTC, если есть 'Z')
-                commit_date_local <- with_tz(commit_date, tzone = Sys.timezone())
-                
-                new_row <- data.frame(
-                  id = commit_data$sha,
-                  patch = file$patch %||% "NULL",
-                  repo = repo_name,
-                  author = commit_data$commit$author$name,
-                  date = format(commit_date_local, "%Y.%m.%d %H:%M:%S"),
-                  filename = file$filename,
-                  status = file$status,
-                  additions = file$additions %||% 0,
-                  deletions = file$deletions %||% 0,
-                  changes = file$changes %||% 0,
-                  message = commit_data$commit$message,
-                  branch = branch_name,
-                  stringsAsFactors = FALSE
-                )
-                
-                # Append to data frame
-                commits_df <- rbind(commits_df, new_row)
-                
-                # Insert into DuckDB
-                dbWriteTable(con, COMMITS_TABLE, new_row, append = TRUE)
-              }
-            }
-          }
-          
-          if (!is.null(setProgress)) {
-            setProgress(value = ind / count_commits, detail = paste(ind, "/", count_commits))
-          }
-        }
+        setProgress(detail = sprintf("%d", length(all_commits)))
+        
         link_header <- headers(response)$link
         if (is.null(link_header) || !grepl('rel="next"', link_header)) {
           break
@@ -262,6 +221,69 @@ get_user_commits_df <- function(repos, setProgress = NULL) {
         url <- next_url
       }
     }
+  }
+  
+  count_commits <- length(all_commits)
+  start_time <- Sys.time()
+  setProgress(message = "⚙️ Обработка коммитов:", value = 0)
+  for (index in seq_along(all_commits)) {
+    commit <- all_commits[[index]]
+    commit_sha <- commit$sha
+    repo_name <- commit$repo_name
+    branch_name <- commit$branch_name
+    
+    query <- sprintf(paste0("SELECT * FROM ", COMMITS_TABLE, " WHERE id = '%s'"), commit_sha)
+    existing_commit <- dbGetQuery(con, query)
+    
+    if (nrow(existing_commit) > 0) {
+      commits_df <- rbind(commits_df, existing_commit)
+    } else {
+      # Fetch commit details from GitHub API
+      commit_details <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/commits/", commit_sha))
+      commit_data <- content(commit_details, "parsed")
+      
+      if (!is.null(commit_data$files)) {
+        for (file in commit_data$files) {
+          commit_date <- ymd_hms(commit_data$commit$author$date)  # парсинг ISO 8601 (автоматически распознает UTC, если есть 'Z')
+          commit_date_local <- with_tz(commit_date, tzone = Sys.timezone())
+          
+          new_row <- data.frame(
+            id = commit_data$sha,
+            patch = file$patch %||% "NULL",
+            repo = repo_name,
+            author = commit_data$commit$author$name,
+            date = format(commit_date_local, "%Y.%m.%d %H:%M:%S"),
+            filename = file$filename,
+            status = file$status,
+            additions = file$additions %||% 0,
+            deletions = file$deletions %||% 0,
+            changes = file$changes %||% 0,
+            message = commit_data$commit$message,
+            branch = branch_name,
+            stringsAsFactors = FALSE
+          )
+          
+          # Append to data frame
+          commits_df <- rbind(commits_df, new_row)
+          
+          # Insert into DuckDB
+          dbWriteTable(con, COMMITS_TABLE, new_row, append = TRUE)
+        }
+      }
+    }
+    
+    remaining <- (Sys.time() - start_time) %>% 
+      as.numeric(units = "secs") %>% 
+      {. * (length(all_commits) - index) / index}
+    
+    setProgress(
+      value = index / length(all_commits),
+      detail = sprintf(
+        "%d/%d (%s)",
+        index, length(all_commits),
+        format(.POSIXct(remaining, tz = "GMT"), "%H:%M:%S")
+      )
+    )
   }
   
   if (nrow(commits_df) > 0) {
