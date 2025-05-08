@@ -135,15 +135,24 @@ get_user_repos <- function(username, setProgress) {
 
 DUCK_DB <- Sys.getenv('DUCK_DB')
 COMMITS_TABLE <- Sys.getenv('COMMITS_TABLE')
-get_user_commits_df <- function(repos, setProgress) {
-  if (is.null(repos)) return(NULL)
-  
+
+get_user_commits_df <- function(repos, setProgress = NULL,
+                                batch_size = 200, log_file='logs.log') {
+  start_time_log <- Sys.time()
+  log_message <- function(event_name, message, file_path) {
+    elapsed <- round(as.numeric(difftime(Sys.time(), start_time_log, units = "secs")), 2)
+    log_entry <- sprintf("[%05.2fs] %-16s %s\n", elapsed, paste0(event_name, ":"), message)
+    cat(log_entry, file = log_file, append = TRUE)
+  }
+  log_message("\n--------FUNCTION_START", "Commit processing initiated---\n")
   # Initialize DuckDB connection
   con <- dbConnect(duckdb(), paste0(DUCK_DB, ".db"))
-  on.exit(dbDisconnect(con), add = TRUE) # Ensure connection closes on exit
+  on.exit(dbDisconnect(con), add = TRUE)
   
-  dbExecute(con, paste0("CREATE TABLE IF NOT EXISTS ", COMMITS_TABLE,
-  " (
+  log_message("DB_CONNECTED", "Connected to DuckDB database")
+  
+  # Create table and index
+  dbExecute(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
       id VARCHAR,
       patch VARCHAR,
       repo VARCHAR,
@@ -156,141 +165,171 @@ get_user_commits_df <- function(repos, setProgress) {
       changes INTEGER,
       message VARCHAR,
       branch VARCHAR
-    )
-  ")
-  )
+    )", COMMITS_TABLE))
+  dbExecute(con, sprintf("CREATE INDEX IF NOT EXISTS idx_%s_id ON %s (id)", COMMITS_TABLE, COMMITS_TABLE))
   
-  # Initialize data frame for commits
-  commits_df <- data.frame(
-    id = character(),
-    patch = character(),
-    repo = character(),
-    author = character(),
-    date = character(),
-    filename = character(),
-    status = character(),
-    additions = numeric(),
-    deletions = numeric(),
-    changes = numeric(),
-    message = character(),
-    branch = character(),
-    stringsAsFactors = FALSE
-  )
-  
-  all_commits <- c()
-  for (repo in repos) {
-    repo_name <- repo$full_name
-    
-    branches_url <- paste0("https://api.github.com/repos/", repo_name, "/branches?per_page=100")
-    branches_response <- github_api_get(branches_url)
-    if (is.null(branches_response)) {
-      next
-    }
-    branches <- content(branches_response, "parsed")
-    
-    for (branch in branches) {
-      branch_name <- branch$name
-      url <- paste0("https://api.github.com/repos/", repo_name, "/commits?per_page=100&sha=", branch_name)
-      
+  # Collect all commit SHAs first for accurate progress tracking
+  all_commits <- list()
+  if (!is.null(repos)) {
+    log_message("PAGES_PROCESS_START", "Starting repository processing")
+    if (!is.null(setProgress)) {
       setProgress(message = "🌐 Поиск коммитов:", value = 0)
-      repeat {
-        response <- github_api_get(url)
-        if (is.null(response)) {
-          break
+    }
+    for (repo in repos) {
+      
+      repo_name <- repo$full_name
+      log_message("REPO_PROCESS_START",paste0( "Processing repository: ", repo_name))
+      
+      branches_response <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/branches?per_page=100"))
+      if (is.null(branches_response)) next
+      branches <- content(branches_response, "parsed")
+      log_message("BRANCHES", paste0("Found ", length(branches), " branches in ", repo_name))
+      
+      for (branch in branches) {
+        branch_name <- branch$name
+        url <- paste0("https://api.github.com/repos/", repo_name, "/commits?per_page=100&sha=", branch_name)
+        log_message("COMMITS_PROCESS_START", paste0("Fetching commits for branch: ", branch_name, " (", repo_name, ")"))
+        
+        repeat {
+          response <- github_api_get(url)
+          if (is.null(response)) break
+          commits <- content(response, "parsed")
+          if (length(commits) == 0) break
+          
+          # Collect commit references
+          new_commits <- lapply(commits, function(c) list(
+            sha = c$sha,
+            repo = repo_name,
+            branch = branch_name
+          ))
+          all_commits <- c(all_commits, new_commits)
+          log_message("SHAS_INFO", paste0("Collected ", length(new_commits), " commit SHAs from ", 
+                             branch_name, " (", repo_name, ")"))
+          
+          # Update collection progress
+          if (!is.null(setProgress)) {
+            setProgress(detail = sprintf("%d", length(all_commits)))
+          }
+          
+          # Pagination
+          link_header <- headers(response)$link
+          if (is.null(link_header) || !grepl('rel="next"', link_header)) break
+          url <- regmatches(link_header, regexpr('<https://[^>]+>; rel="next"', link_header)) |> 
+            gsub('<|>; rel="next"', '', x = _)
         }
-        
-        commits <- content(response, "parsed")
-        if (length(commits) == 0) break
-        all_commits <- c(all_commits, lapply(commits, function(commit) {
-          list(
-            sha = commit$sha,
-            repo_name = repo_name,
-            branch_name = branch_name
-          )
-        }))
-        
-        setProgress(detail = sprintf("%d", length(all_commits)))
-        
-        link_header <- headers(response)$link
-        if (is.null(link_header) || !grepl('rel="next"', link_header)) {
-          break
-        }
-        
-        next_url <- regmatches(link_header, regexpr('<https://[^>]+>; rel="next"', link_header))
-        next_url <- gsub('<|>; rel="next"', '', next_url)
-        url <- next_url
       }
     }
   }
   
-  count_commits <- length(all_commits)
+  total_commits <- length(all_commits)
+  if (total_commits == 0) return(NULL)
+  
+  # Get existing SHAs from database
+  log_message("SHA'S_IN_DB","Checking existing commits in database")
+  existing_shas <- dbGetQuery(con, sprintf("SELECT DISTINCT id FROM %s", COMMITS_TABLE))$id
+  
+  # Initialize batch processing variables
+  commits_list <- list()
+  new_commits_batch <- list()
+  batch_counter <- 0
+  
+  # Batch writing helper function
+  write_batch <- function() {
+    if (length(new_commits_batch) > 0) {
+      combined_batch <- do.call(rbind, new_commits_batch)
+      log_message("DB_WRITE_START", sprintf("Writing batch of %d records", nrow(combined_batch)))
+      dbWriteTable(con, COMMITS_TABLE, combined_batch, append = TRUE)
+      commits_list <<- c(commits_list, list(combined_batch))
+      new_commits_batch <<- list()
+      batch_counter <<- 0
+      log_message("DB_WRITE_ENDS", sprintf("Writing batch of %d records", nrow(combined_batch)))
+    }
+  }
+  
+  # Start processing phase
   start_time <- Sys.time()
-  setProgress(message = "⚙️ Обработка коммитов:", value = 0)
-  for (index in seq_along(all_commits)) {
-    commit <- all_commits[[index]]
+  if (!is.null(setProgress)) {
+    setProgress(message = "⚙️ Обработка коммитов:", value = 0)
+  }
+  
+  for (i in seq_along(all_commits)) {
+    commit <- all_commits[[i]]
     commit_sha <- commit$sha
-    repo_name <- commit$repo_name
-    branch_name <- commit$branch_name
+    repo_name <- commit$repo
+    branch_name <- commit$branch
     
-    query <- sprintf(paste0("SELECT * FROM ", COMMITS_TABLE, " WHERE id = '%s'"), commit_sha)
-    existing_commit <- dbGetQuery(con, query)
-    
-    if (nrow(existing_commit) > 0) {
-      commits_df <- rbind(commits_df, existing_commit)
+    if (commit_sha %in% existing_shas) {
+      log_message("EXISTING_COMMIT", sprintf("Commit %s already in database", substr(commit_sha, 1, 7)))
+      # Retrieve existing data from DB
+      existing_data <- dbGetQuery(con, sprintf("SELECT * FROM %s WHERE id = '%s'", 
+                                               COMMITS_TABLE, commit_sha))
+      commits_list <- c(commits_list, list(existing_data))
     } else {
-      # Fetch commit details from GitHub API
+      
+      log_message("NEW_COMMIT_START", sprintf("Processing new commit: %s", substr(commit_sha, 1, 7)))
+      # Process new commit
+      
       commit_details <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/commits/", commit_sha))
+      if (is.null(commit_details)) next
       commit_data <- content(commit_details, "parsed")
       
-      if (!is.null(commit_data$files)) {
-        for (file in commit_data$files) {
-          commit_date <- ymd_hms(commit_data$commit$author$date)  # парсинг ISO 8601 (автоматически распознает UTC, если есть 'Z')
+      if (!is.null(commit_data$files) && length(commit_data$files) > 0) {
+        file_data <- lapply(commit_data$files, function(file) {
+          commit_date <- ymd_hms(commit_data$commit$author$date)
           commit_date_local <- with_tz(commit_date, tzone = Sys.timezone())
           
-          new_row <- data.frame(
-            id = commit_data$sha,
-            patch = file$patch %||% "NULL",
+          data.frame(
+            id = commit_sha,
+            patch = if (is.null(file$patch)) "NULL" else file$patch,
             repo = repo_name,
             author = commit_data$commit$author$name,
             date = format(commit_date_local, "%Y.%m.%d %H:%M:%S"),
             filename = file$filename,
             status = file$status,
-            additions = file$additions %||% 0,
-            deletions = file$deletions %||% 0,
-            changes = file$changes %||% 0,
+            additions = if (is.null(file$additions)) 0 else file$additions,
+            deletions = if (is.null(file$deletions)) 0 else file$deletions,
+            changes = if (is.null(file$changes)) 0 else file$changes,
             message = commit_data$commit$message,
             branch = branch_name,
             stringsAsFactors = FALSE
           )
+        })
+        
+        new_commit_df <- do.call(rbind, file_data)
+        if (!is.null(new_commit_df) && nrow(new_commit_df) > 0) {
+          new_commits_batch <- c(new_commits_batch, list(new_commit_df))
+          batch_counter <- batch_counter + 1
+          existing_shas <- c(existing_shas, commit_sha)
           
-          # Append to data frame
-          commits_df <- rbind(commits_df, new_row)
-          
-          # Insert into DuckDB
-          dbWriteTable(con, COMMITS_TABLE, new_row, append = TRUE)
+          if (batch_counter >= batch_size) {
+            write_batch()
+          }
         }
       }
     }
     
-    remaining <- (Sys.time() - start_time) %>% 
-      as.numeric(units = "secs") %>% 
-      {. * (length(all_commits) - index) / index}
-    
-    setProgress(
-      value = index / length(all_commits),
-      detail = sprintf(
-        "%d/%d (%s)",
-        index, length(all_commits),
-        format(.POSIXct(remaining, tz = "GMT"), "%H:%M:%S")
+    # Update processing progress
+    if (!is.null(setProgress)) {
+      elapsed <- as.numeric(Sys.time() - start_time)
+      remaining <- elapsed * (total_commits - i) / i
+      setProgress(
+        value = i / total_commits,
+        detail = sprintf("%d/%d (%s)",
+                         i, total_commits,
+                         format(.POSIXct(remaining, tz = "GMT"), "%H:%M:%S"))
       )
-    )
+    }
   }
   
-  if (nrow(commits_df) > 0) {
-    return(commits_df)
-  } else {
-    return(NULL)
-  }
+  # Write final batch
+  write_batch()
+  log_message("LAST_DATA_WAS_WRITTEN", paste0("Writing final batch of ", batch_counter, " commits"))
+  
+  # Combine and return results
+  commits_df <- if (length(commits_list) > 0) do.call(rbind, commits_list) else NULL
+  final_count <- if (!is.null(commits_df)) nrow(commits_df) else 0
+  log_message("NY, WOT I WSE", paste0("Function completed. Total commits processed: ", final_count))
+  return(commits_df)
 }
 
 get_user_profile <- function(username) {
