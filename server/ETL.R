@@ -7,7 +7,7 @@ library(lubridate)
 
 GITHUB_TOKEN <- Sys.getenv('GITHUB_TOKEN')
 github_api_get <- function(url) {
-  # обработка запросов к GitHub API по URL
+  # обработка запросов к GitHub API по URL 
   if (nzchar(GITHUB_TOKEN)) {
     response <- GET(url, add_headers(Authorization = paste("token", GITHUB_TOKEN)))
   } else {
@@ -41,10 +41,10 @@ github_api_get <- function(url) {
     message("Ошибка сервера.")
     return(NULL)
   }
-
+  
   if (status_code(response) != 200) {
     stop(paste("Ошибка при запросе к GitHub API:", status_code(response)))
-  }
+  } 
 
   return(response)
 }
@@ -355,7 +355,7 @@ get_user_profile <- function(username) {
 }
 
 prepare_activity_data <- function(repos) {
-  # на основе репозиториев, визуализирует данные о forks и issues
+  # на основе репозиториев, визуализирует данные о forks и issues 
   if (is.null(repos)) {
     return(NULL)
   }
