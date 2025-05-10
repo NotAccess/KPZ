@@ -102,7 +102,7 @@ server <- function(input, output, session) {
                       uiOutput("github_rate_limit")
                )
              ),
-             actionButton("save_env", "Сохранить настройки", icon = icon("save")),
+             actionButton("save_env", "Сохранить настройки и перезагрузить сессию", icon = icon("save")),
              verbatimTextOutput("env_status")
            ),
            "other_settings" = tagList(
@@ -135,7 +135,7 @@ server <- function(input, output, session) {
         "Настройки успешно сохранены!"
       })
       # Перезагрузска R сессии
-      session$reload()
+      .rs.restartR()
     }, error = function(e) {
       output$env_status <- renderText({
         paste("Ошибка при сохранении настроек:", e$message)
