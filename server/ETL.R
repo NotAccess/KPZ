@@ -4,10 +4,9 @@ library(purrr)
 library(duckdb)
 library(DBI)
 library(lubridate)
-
 GITHUB_TOKEN <- Sys.getenv('GITHUB_TOKEN')
 github_api_get <- function(url) {
-  # обработка запросов к GitHub API по URL 
+  # обработка запросов по URL к GitHub API
   if (nzchar(GITHUB_TOKEN)) {
     response <- GET(url, add_headers(Authorization = paste("token", GITHUB_TOKEN)))
   } else {
@@ -18,34 +17,27 @@ github_api_get <- function(url) {
     message("Репозиторий не содержит данных (204 No Content).")
     return(NULL)
   }
-
   if (status_code(response) == 401) {
     stop(paste("Ошибка авторизации (проверьте токен):", status_code(response)))
   }
-
   if (status_code(response) == 403) {
     stop("Лимит запросов исчерпан. Пожалуйста, обновите GitHub токен.")
   }
-  
   if (status_code(response) == 404) {
     message("Пользователь GitHub с данным именем не найден.")
     return(NULL)
   }
-
   if (status_code(response) == 409) {
     message("Репозиторий пустой или конфликт (409 Conflict).")
     return(NULL)
   }
-
   if (status_code(response) >= 500 && status_code(response) < 600) {
     message("Ошибка сервера.")
     return(NULL)
   }
-  
   if (status_code(response) != 200) {
     stop(paste("Ошибка при запросе к GitHub API:", status_code(response)))
   } 
-
   return(response)
 }
 
@@ -355,7 +347,7 @@ get_user_profile <- function(username) {
 }
 
 prepare_activity_data <- function(repos) {
-  # на основе репозиториев, визуализирует данные о forks и issues 
+  # Визуализирует данные о forks и issues, на основе репозиториев
   if (is.null(repos)) {
     return(NULL)
   }
@@ -380,7 +372,7 @@ prepare_activity_data <- function(repos) {
 }
 
 prepare_language_data <- function(repos) {
-  # на основе репозиториев, визуализирует данные о использовании языков
+  # Визуализирует данные о использовании языков, на основе репозиториев
   if (is.null(repos)) {
     return(NULL)
   }
@@ -402,7 +394,7 @@ prepare_language_data <- function(repos) {
 }
 
 prepare_commit_heatmap_data <- function(commits) {
-  # строит тепловую карту по дате коммита
+  # Строит тепловую карту по дате коммита
   if (is.null(commits)) {
     return(NULL)
   }
@@ -422,5 +414,4 @@ prepare_commit_heatmap_data <- function(commits) {
     group_by(hour, day) %>%
     summarise(count = n(), .groups = "drop")
 
-  return(heatmap_data)
-}
+  return(heatmap_data)}
