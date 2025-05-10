@@ -17,27 +17,34 @@ github_api_get <- function(url) {
     message("Репозиторий не содержит данных (204 No Content).")
     return(NULL)
   }
+
   if (status_code(response) == 401) {
     stop(paste("Ошибка авторизации (проверьте токен):", status_code(response)))
   }
+
   if (status_code(response) == 403) {
     stop("Лимит запросов исчерпан. Пожалуйста, обновите GitHub токен.")
   }
+
   if (status_code(response) == 404) {
     message("Пользователь GitHub с данным именем не найден.")
     return(NULL)
   }
+
   if (status_code(response) == 409) {
     message("Репозиторий пустой или конфликт (409 Conflict).")
     return(NULL)
   }
+
   if (status_code(response) >= 500 && status_code(response) < 600) {
     message("Ошибка сервера.")
     return(NULL)
   }
+
   if (status_code(response) != 200) {
     stop(paste("Ошибка при запросе к GitHub API:", status_code(response)))
-  } 
+  }
+
   return(response)
 }
 
@@ -414,4 +421,5 @@ prepare_commit_heatmap_data <- function(commits) {
     group_by(hour, day) %>%
     summarise(count = n(), .groups = "drop")
 
-  return(heatmap_data)}
+  return(heatmap_data)
+}
