@@ -10,7 +10,7 @@
 - Установленный RStudio (рекомендуется, но не обязательно)
 - Установленные пакеты:
   ```R
-  install.packages(c("shiny", "httr", "dplyr", "purrr", "DT", "shinycssloaders", "plotly", "ggplot2", "tidyr", "fastDummies", "shinyjs", "shinyBS", "duckdb", "DBI", "litedown", "markdown", "stringr", "jsonlite", "tools", "lubridate"))
+  install.packages(c("shiny", "httr", "dplyr", "purrr", "DT", "shinycssloaders", "plotly", "ggplot2", "tidyr", "fastDummies", "shinyjs", "shinyBS", "duckdb", "DBI", "litedown", "markdown", "stringr", "jsonlite", "tools", "lubridate", "yaml", "readr"))
   ```
 
 ## Как запустить приложение

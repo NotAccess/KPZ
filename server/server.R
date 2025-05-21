@@ -8,6 +8,7 @@ library(plotly)
 library(stringr)
 library(jsonlite)
 library(markdown)
+library(readr)
 
 source("server/ETL.R")
 source("server/ML.R")
@@ -33,7 +34,7 @@ filter_repos <- function(repos, filters) {
 
 server <- function(input, output, session) {
   needs_restart <- FALSE
-
+  
   # Проверка и инициализация .Renviron
   init_renviron <- function() {
     renv_path <- file.path(getwd(), ".Renviron")
@@ -81,14 +82,14 @@ server <- function(input, output, session) {
     # Загружаем обновленный .Renviron
     readRenviron(renv_path)
   }
-
+  
   # Инициализируем .Renviron перед запуском приложения
   init_renviron()
-
+  
   # Реактивные значения для текущих вкладок
   current_main_tab <- reactiveVal("report")
   current_settings_tab <- reactiveVal("env_vars")
-
+  
   # Обработчики переключения вкладок Главного меню
   observeEvent(input$tab_report, { current_main_tab("report") })
   observeEvent(input$tab_commits, { current_main_tab("commits") })
@@ -96,11 +97,11 @@ server <- function(input, output, session) {
   observeEvent(input$tab_languages, { current_main_tab("languages") })
   observeEvent(input$tab_activity, { current_main_tab("activity") })
   observeEvent(input$tab_pca, { current_main_tab("pca") })
-
+  
   # Обработчики переключения вкладок Настроек
   observeEvent(input$tab_env_vars, { current_settings_tab("env_vars") })
   observeEvent(input$tab_other_settings, { current_settings_tab("other_settings") })
-
+  
   # Рендеринг контента для Главного меню
   output$main_content <- renderUI({
     switch(current_main_tab(),
@@ -112,30 +113,27 @@ server <- function(input, output, session) {
            "activity" = withSpinner(plotlyOutput("commit_heatmap")),
            "pca" = tagList(
              tags$div(
-               style = "display: flex; height: calc(100vh - 120px);",
+               style = "display: flex; height: calc(100vh - 200px);",
                tags$div(
-                 style = "flex: 1 1 60%; min-width: 500px; padding-right: 12px;",
-                 withSpinner(plotlyOutput("pca_plot", height = "100%"))
+                 style = "flex: 1 1 60%;",
+                 withSpinner(plotlyOutput("pca_plot"))
                ),
                tags$div(
-                 style = "flex: 1 1 40%; min-width: 400px; height: 100%; overflow: hidden;",
+                 style = "flex: 1 1 40%; display: flex; flex-direction: column;",
                  tags$div(
-                   style = "height: 100%; display: flex; flex-direction: column;",
-                   tags$div(
-                     style = "flex-shrink: 0; padding: 8px 0;",
-                     uiOutput("pca_outliers")
-                   ),
-                   tags$div(
-                     style = "flex: 1; overflow-y: auto; padding-right: 8px;",
-                     withSpinner(uiOutput("outlier_cards"))
-                   )
+                   style = "padding: 8px 0;",
+                   uiOutput("pca_outliers")
+                 ),
+                 tags$div(
+                   style = "overflow-y: auto; padding-right: 8px;",
+                   withSpinner(uiOutput("outlier_cards"))
                  )
                )
              )
            )
     )
   })
-
+  
   # Рендеринг контента для Настроек
   output$settings_content <- renderUI({
     switch(current_settings_tab(),
@@ -163,7 +161,7 @@ server <- function(input, output, session) {
            )
     )
   })
-
+  
   # Обработчик сохранения переменных окружения
   observeEvent(input$save_env, {
     env_vars <- c(
@@ -190,7 +188,7 @@ server <- function(input, output, session) {
       })
     })
   })
-
+  
   # Проверка лимита запросов
   update_github_rate_limit <- function() {
     token <- Sys.getenv("GITHUB_TOKEN")
@@ -203,14 +201,14 @@ server <- function(input, output, session) {
             Authorization = paste("token", token)
           )
         )
-
+        
         if (status_code(response) == 200) {
           limits <- content(response)
           core_limit <- limits$resources$core
           remaining <- core_limit$remaining
           limit <- core_limit$limit
           reset_time <- as.POSIXct(core_limit$reset, origin = "1970-01-01")
-
+          
           output$github_rate_limit <- renderUI({
             tags$div(
               class = "rate-limit-box",
@@ -246,9 +244,9 @@ server <- function(input, output, session) {
       })
     }
   }
-
+  
   hide("filters")
-
+  
   data <- reactiveValues(
     repos = NULL,
     user_profile = NULL,
@@ -257,7 +255,7 @@ server <- function(input, output, session) {
     language_data = NULL,
     commit_heatmap_data = NULL
   )
-
+  
   observeEvent(input$toggle_filters, {
     toggle("filters")
     if (input$toggle_filters %% 2 == 1) {
@@ -266,7 +264,7 @@ server <- function(input, output, session) {
       updateActionButton(session, "toggle_filters", label = "Показать фильтры", icon = icon("eye"))
     }
   })
-
+  
   filters <- reactive({
     list(
       language = input$language_filter,
@@ -279,20 +277,20 @@ server <- function(input, output, session) {
       license = input$license_filter
     )
   })
-
+  
   observeEvent(input$submit_button, {
     user_text <- input$user_input
-
+    
     data$user_profile <- NULL
     data$commits <- NULL
     data$activity_data <- NULL
     data$language_data <- NULL
     data$commit_heatmap_data <- NULL
-
+    
     withProgress(message = "", value = 0, {
       data$repos <- get_user_repos(user_text, setProgress) %>%
         filter_repos(filters())
-
+      
       if (!is.null(data$repos)) {
         data$user_profile <- get_user_profile(user_text)
         data$activity_data <- prepare_activity_data(data$repos)
@@ -302,7 +300,7 @@ server <- function(input, output, session) {
       }
     })
   })
-
+  
   # Вызов при загрузке
   observe({
     if (!is.null(data$repos)) {
@@ -318,7 +316,7 @@ server <- function(input, output, session) {
     }
     update_github_rate_limit()
   })
-
+  
   output$user_report <- renderUI({
     profile <- data$user_profile
     if (!is.null(profile)) {
@@ -547,7 +545,7 @@ server <- function(input, output, session) {
       )
     } else { }
   })
-
+  
   output$commits_table <- renderDataTable({
     commits <- data$commits
     if (!is.null(commits)) {
@@ -559,7 +557,7 @@ server <- function(input, output, session) {
           x
         }
       })
-
+      
       datatable(
         commits,
         options = list(
@@ -589,7 +587,7 @@ server <- function(input, output, session) {
       NULL
     }
   })
-
+  
   output$activity_plot <- renderPlotly({
     if (!is.null(data$activity_data)) {
       ggplotly(
@@ -599,7 +597,7 @@ server <- function(input, output, session) {
       )
     }
   })
-
+  
   output$language_plot <- renderPlotly({
     if (!is.null(data$language_data)) {
       ggplotly(
@@ -609,7 +607,7 @@ server <- function(input, output, session) {
       )
     }
   })
-
+  
   output$commit_heatmap <- renderPlotly({
     if (!is.null(data$commit_heatmap_data)) {
       ggplotly(
@@ -620,28 +618,31 @@ server <- function(input, output, session) {
       )
     }
   })
-
+  
   output$pca_plot <- renderPlotly({
     if (!is.null(data$commits)) {
       pca_data <- perform_pca(data$commits)
-
+      
       plot_ly(
         data = pca_data,
         x = ~PC1,
         y = ~PC2,
         color = ~author,
-        text = ~paste("ID:", id, "<br>PC1:", round(PC1, 2), "<br>PC2:", round(PC2, 2)),
+        text = ~sprintf(
+          "<b>ID</b>: %s<br><b>PC1</b>: %.2f<br><b>PC2</b>: %.2f<br><b>МГК</b>: %.2f",
+          substr(id, 1, 7), round(PC1, 2), round(PC2, 2), round(distance, 2)
+        ),
         hoverinfo = "text",
         type = "scatter",
         mode = "markers"
       ) %>% layout()
     }
   })
-
+  
   output$outlier_cards <- renderUI({
     req(data$commits)
     outliers <- detect_outliers(perform_pca(data$commits))
-
+    
     if (!is.null(outliers) && nrow(outliers) > 0) {
       # Группируем коммиты по (ID, author)
       outlier_commits <- merge(outliers, data$commits, by = "id") %>%
@@ -660,11 +661,11 @@ server <- function(input, output, session) {
           .groups = "drop"
         ) %>%
         arrange(desc(z_score))
-
+      
       lapply(1:nrow(outlier_commits), function(i) {
         commit <- outlier_commits[i,]
         commit_url <- paste0("https://github.com/", commit$repo, "/commit/", commit$id)
-
+        
         # Определение цветов для z-score
         z_color <- case_when(
           commit$z_score >= 3 ~ list(
@@ -686,7 +687,7 @@ server <- function(input, output, session) {
             label = "✅ Норма"
           )
         )
-
+        
         tags$div(
           class = "commit-card",
           style = paste(
@@ -698,7 +699,7 @@ server <- function(input, output, session) {
             "box-shadow: 0 2px 6px rgba(0,0,0,0.08);",
             "position: relative;"
           ),
-
+          
           # Лента аномалии
           tags$div(
             style = paste(
@@ -713,7 +714,7 @@ server <- function(input, output, session) {
             ),
             icon("exclamation-triangle"), " Аномалия"
           ),
-
+          
           # Основной контент
           tags$div(
             # Заголовок
@@ -755,11 +756,11 @@ server <- function(input, output, session) {
                 )
               )
             ),
-
+            
             # Метрики
             tags$div(
               style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px;",
-
+              
               # Блок даты
               tags$div(
                 class = "metric-card",
@@ -770,7 +771,7 @@ server <- function(input, output, session) {
                   tags$div(style = "font-weight: 500;", format(as.POSIXct(commit$date, format = "%Y.%m.%d %H:%M:%S"), "%d.%m.%Y %H:%M:%S"))
                 )
               ),
-
+              
               # Блок файлов
               tags$div(
                 class = "metric-card",
@@ -781,7 +782,7 @@ server <- function(input, output, session) {
                   tags$div(style = "font-weight: 500; color: #0366d6;", commit$files_changed)
                 )
               ),
-
+              
               # Блок изменений
               tags$div(
                 class = "metric-card",
@@ -797,7 +798,7 @@ server <- function(input, output, session) {
                 )
               )
             ),
-
+            
             # Сообщение коммита
             tags$div(
               style = "background: #f6f8fa; padding: 12px; border-radius: 6px; margin-bottom: 12px;",
@@ -807,11 +808,11 @@ server <- function(input, output, session) {
                 tags$em(commit$message)
               )
             ),
-
+            
             # Метрики МГК
             tags$div(
               style = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px;",
-
+              
               # Блок z-score
               tags$div(
                 style = paste(
@@ -831,7 +832,7 @@ server <- function(input, output, session) {
                   tags$span(style = "margin-left: 5px;", z_color$label)
                 )
               ),
-
+              
               # Блок расстояния МГК
               tags$div(
                 style = paste(
@@ -845,7 +846,7 @@ server <- function(input, output, session) {
                 tags$div(style = "font-weight: bold; color: #b71c1c;", round(commit$distance, 2))
               )
             ),
-
+            
             # Блок отчёта
             tags$div(
               style = paste(
@@ -862,7 +863,8 @@ server <- function(input, output, session) {
                   style = "flex-grow: 1; min-width: 0;",
                   HTML(
                     commit$patch %>%
-                      response_otchet() %>%
+                      get_response(., n_files = commit$files_changed) %>%
+                      format_response() %>%
                       format_report() %>%
                       str_replace(
                         pattern = "<pre><code>",
@@ -909,21 +911,10 @@ server <- function(input, output, session) {
       )
     }
   })
-
-  format_report <- function(text) {
-    text <- gsub("```r\n", "```\n", text, fixed = TRUE)
-    text <- gsub("\n", "  \n", text)
-    text <- paste0("**Отчёт:**  \n", text)
-    markdownToHTML(
-      text = text,
-      fragment.only = TRUE,
-      options = c("escape", "fragment_only")
-    ) %>%
-      str_replace_all("&lt;", "<") %>% # Исправляем HTML-сущности
-      str_replace_all("&gt;", ">")
-  }
-
-  response_otchet <- function(patch) {
+  
+  system_prompt <- read_file("server/data/prompt")
+  schema <- read_json("server/data/schema.json")
+  get_response <- function(patch, n_files) {
     prompt <- list(
       modelUri = sprintf("gpt://%s/yandexgpt-32k", YANDEX_FOLDER_ID),
       completionOptions = list(
@@ -937,54 +928,114 @@ server <- function(input, output, session) {
       messages = list(
         list(
           role = "system",
-          text = paste0("Ты получишь изменения из коммита (GitHub API patch), который был идентифицирован, как аномальный ",
-                        "(обращай на это внимание, однако помни, что коммиты могут быть и ложно-аномальными). ",
-                        "Тебе нужно составить список файлов, которые требуют отдельного/внимательного анализа (не обязательно все; ты должен быть уверен в важности анализа; стоит обращать внимание на потенциально опасные файлы), ",
-                        "а также дать краткий отчёт по типам вносимых изменений. ",
-                        "В отличие от файлов, на которые 'стоит обратить внимание', в список изменений обязательно должны попасть все файлы коммита.\n",
-                        "Типы вносимых изменения: 'Документация', 'Fix', 'Расширение', 'Вредоносный код', 'Ошибка кода', 'NULL', 'Другое'.\n",
-                        "Формат ввода:\n",
-                        "```\n",
-                        "patch ({имя_файла_1}): ```{patch_1}```;\n",
-                        "patch ({имя_файла_2}): ```{patch_2}```;\n",
-                        "...\n",
-                        "Ожидаемый формат отчёта:\n",
-                        "```\n",
-                        "Стоит обратить внимание:\n",
-                        "* `{аномальный_файл_1}`: **{на что стоит обратить внимание}**;\n",
-                        "* `{аномальный_файл_2}`: **{на что стоит обратить внимание}**;\n",
-                        "...\n",
-                        "Изменения:\n",
-                        "* `{имя_файла_1}`: **{тип_изменения}** ({объяснение (1-2 предложения)});\n",
-                        "* `{имя_файла_2}`: **{тип_изменения}** ({объяснение (1-2 предложения)});\n",
-                        "...\n",
-                        "```"
-                        )
-          ),
+          text = system_prompt
+        ),
         list(
           role = "user",
-          text = patch
+          text = paste("Анализируй следующий git-patch (", n_files," файлов):\n```\n", patch, "\n```")
         )
-      )
-    )
-
-    response <- POST(
-      url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
-      add_headers(
-        "Content-Type" = "application/json",
-        "Authorization" = paste("Api-Key", YANDEX_API_KEY)
       ),
-      body = toJSON(prompt, auto_unbox = TRUE, pretty = TRUE),
-      encode = "json"
+      json_schema = schema
     )
-
-    if (status_code(response) == 200) {
-      return(content(response, "parsed")$result$alternatives[[1]]$message$text)
-    } else {
-      return(paste0("ERROR: ", status_code(response)))
+    
+    response <- NULL
+    attempt <- 1
+    max_attempts <- 3
+    
+    while (attempt <= max_attempts) {
+      tryCatch({
+        response <- POST(
+          url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
+          add_headers(
+            "Content-Type" = "application/json",
+            "Authorization" = paste("Api-Key", YANDEX_API_KEY)
+          ),
+          body = toJSON(prompt, auto_unbox = TRUE, pretty = TRUE),
+          encode = "json"
+        )
+        
+        if (status_code(response) != 200) {
+          return(paste("ERROR:", status_code(response)))
+        }
+        
+        # Парсинг и валидация JSON
+        response_content <- content(response, "text", encoding = "UTF-8")
+        if (!jsonlite::validate(response_content)) {
+          stop("Invalid JSON response")
+        }
+        
+        parsed_response <- fromJSON(response_content, simplifyVector = FALSE)
+        return(parsed_response$result$alternatives[[1]]$message$text %>% 
+               fromJSON(simplifyVector = FALSE))
+      }, error = function(e) {
+        attempt <<- attempt + 1
+      })
     }
+    
+    return("ERROR: max attempts")
   }
-
+  
+  format_response <- function(data) {
+    if (is.character(data) ) return(data)
+    
+    report <- c(sprintf("**Отчёт** (`%s`):\n", data$status))
+    
+    if (length(data$analysis) > 0) {
+      # Группировка по уровням риска
+      risks <- list(
+        CRITICAL = list(),
+        WARNING = list(),
+        INFO = list(),
+        SAFE = list()
+      )
+      
+      for (item in data$analysis) {
+        risks[[item$risk_level]] <- c(risks[[item$risk_level]], list(item))
+      }
+      
+      # Генерация секций для каждого уровня риска
+      for (risk_level in names(risks)) {
+        if (length(risks[[risk_level]]) > 0) {
+          # Заголовок уровня риска с иконкой
+          risk_icon <- switch(risk_level,
+                              "CRITICAL" = "🔴",
+                              "WARNING" = "🟠", 
+                              "INFO" = "🔵",
+                              "SAFE" = "🟢")
+          
+          report <- c(report, sprintf("\n%s **%s**", risk_icon, risk_level))
+          
+          # Вывод каждого случая
+          for (finding in risks[[risk_level]]) {
+            report <- c(report,
+                        sprintf("\n**File:** `%s`\n", finding$path),
+                        sprintf("- **Reason:** %s\n", finding$reason),
+                        sprintf("- **Code:**\n```\n%s\n```\n", finding$code_snippet),
+                        paste("  -", finding$recommendations, collapse = "\n") %>%
+                          sprintf("- **Recommendations:**\n%s\n", .),
+                        "---") # Разделитель между находками
+          }
+        }
+      }
+    } else {
+      report <- c(report, "Опасные файлы не обнаружены")
+    }
+    
+    return(paste0(report, collapse = ""))
+  } 
+  
+  format_report <- function(text) {
+    text <- gsub("```r\n", "```\n", text, fixed = TRUE)
+    text <- gsub("\n", "  \n", text)
+    markdownToHTML(
+      text = text,
+      fragment.only = TRUE,
+      options = c("escape", "fragment_only")
+    ) %>%
+      str_replace_all("&lt;", "<") %>%
+      str_replace_all("&gt;", ">")
+  }
+  
   # Обработчик закрытия приложения
   session$onSessionEnded(function() {
     if (needs_restart) {
