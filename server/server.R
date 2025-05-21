@@ -86,6 +86,12 @@ server <- function(input, output, session) {
   # Инициализируем .Renviron перед запуском приложения
   init_renviron()
   
+  # Обработка текущего уровня логгирования
+  observeEvent(input$log_level, {
+    new_level <- input$log_level
+    flog.threshold(new_level)
+  })
+  
   # Реактивные значения для текущих вкладок
   current_main_tab <- reactiveVal("report")
   current_settings_tab <- reactiveVal("env_vars")

@@ -8,7 +8,12 @@ library(httr)
 library(yaml)
 
 perform_pca <- function(commits, scale = TRUE) {
-  if (is.null(commits)) stop("Ошибка: commits равен NULL")
+  flog.debug("[PCA] PCA starts")
+  if (is.null(commits)) {
+    flog.debug("[PCA] commits for PCA = Null")
+    stop("Ошибка: commits равен NULL")
+      
+  }
   
   META_COLUMNS <- c("id", "author")
   DUMMY_COLUMNS <- c("repo", "author_copy", "status", "file_extension", "branch",
@@ -53,6 +58,7 @@ perform_pca <- function(commits, scale = TRUE) {
   
   # Предобработка данных
   preprocess_data <- function(data) {
+    flog.trace("[PCA] PCA preprocess starts")
     # Функция классификации
     classify_file_type <- function(filename) {
       # Нормализация имени файла
@@ -147,8 +153,10 @@ perform_pca <- function(commits, scale = TRUE) {
       )
   }
   
+  
   # Агрегация данных
   aggregate_data <- function(data) {
+    flog.trace("[PCA] PCA aggreagation starts")
     dummy_features <- paste0(DUMMY_COLUMNS, "_")
     
     data %>%
@@ -185,6 +193,7 @@ perform_pca <- function(commits, scale = TRUE) {
     stop("Ошибка: недостаточно числовых столбцов для PCA")
   }
   
+  flog.trace("[PCA] PCA compute begins")
   # Вычисление PCA
   pca_result <- prcomp(numeric_data, center = TRUE, scale. = scale)
   

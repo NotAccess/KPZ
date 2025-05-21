@@ -139,7 +139,25 @@ ui <- fluidPage(
             selectize = TRUE
           )
         ),
-
+        tags$div(
+          id = "filters",
+          style = "margin-top: 20px;",
+          
+          # Группа для настроек логирования
+          tags$div(
+            class = "filter-group",
+            style = "border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px;",
+            tags$h4(icon("database"), " Настройки логирования", style = "margin-top: 0;"),
+            
+            selectInput(
+              "log_level",
+              label = tags$span(icon("signal"), "Уровень логирования:"),
+              choices = c("TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"),
+              selected = "INFO",
+              selectize = FALSE
+            )
+          )
+          ),
         # Группа фильтров по метрикам
         tags$div(
           class = "filter-group",

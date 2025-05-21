@@ -10,38 +10,42 @@ github_api_get <- function(url) {
   if (nzchar(GITHUB_TOKEN)) {
     response <- GET(url, add_headers(Authorization = paste("token", GITHUB_TOKEN)))
   } else {
+    flog.warn("[WARN] No token provided")
     response <- GET(url)
   }
 
   if (status_code(response) == 204) {
-    message("Репозиторий не содержит данных (204 No Content).")
+    flog.warn("[INFO] Репозиторий не содержит данных (204 No Content).")
     return(NULL)
   }
 
   if (status_code(response) == 401) {
+    flog.error("[ERROR] Ошибка авторизации (проверьте токен): %s",status_code(response))
     stop(paste("Ошибка авторизации (проверьте токен):", status_code(response)))
   }
 
   if (status_code(response) == 403) {
+    flog.error("[ERROR] Лимит запросов исчерпан): %s",status_code(response))
     stop("Лимит запросов исчерпан. Пожалуйста, обновите GitHub токен.")
   }
 
   if (status_code(response) == 404) {
-    message("Пользователь GitHub с данным именем не найден.")
+    flog.warn("[WARN] Пользователь GitHub с данным именем не найден: %s",status_code(response))
     return(NULL)
   }
 
   if (status_code(response) == 409) {
-    message("Репозиторий пустой или конфликт (409 Conflict).")
+    flog.warn("[WARN] Репозиторий пустой или конфликт (409 Conflict): %s",status_code(response))
     return(NULL)
   }
 
   if (status_code(response) >= 500 && status_code(response) < 600) {
-    message("Ошибка сервера.")
+    flog.warn("[WARN] Ошибка сервера: %s",status_code(response))
     return(NULL)
   }
 
   if (status_code(response) != 200) {
+    flog.error("Ошибка при запросе к GitHub API: %s", status_code(response))
     stop(paste("Ошибка при запросе к GitHub API:", status_code(response)))
   }
 
@@ -132,23 +136,23 @@ get_user_repos <- function(username, setProgress) {
   return(repo_data)
 }
 
-DUCK_DB <- Sys.getenv('DUCK_DB')
-COMMITS_TABLE <- Sys.getenv('COMMITS_TABLE')
+
+
 
 get_user_commits_df <- function(repos, setProgress = NULL,
                                 batch_size = 200, log_file='logs.log') {
-  start_time_log <- Sys.time()
-  log_message <- function(event_name, message, file_path) {
-    elapsed <- round(as.numeric(difftime(Sys.time(), start_time_log, units = "secs")), 2)
-    log_entry <- sprintf("[%05.2fs] %-16s %s\n", elapsed, paste0(event_name, ":"), message)
-    cat(log_entry, file = log_file, append = TRUE)
-  }
-  log_message("\n--------FUNCTION_START", "Commit processing initiated---\n")
+
+  flog.info("\n-------- FUNCTION START: Commit processing initiated --------")
+  #Get variables
+  DUCK_DB <- Sys.getenv('DUCK_DB')
+  COMMITS_TABLE <- Sys.getenv('COMMITS_TABLE')
+  flog.trace("[VARS] Varribles of db loaded DB=%s, table=%s", DUCK_DB, COMMITS_TABLE)
+  
   # Initialize DuckDB connection
   con <- dbConnect(duckdb(), paste0(DUCK_DB, ".db"))
   on.exit(dbDisconnect(con), add = TRUE)
   
-  log_message("DB_CONNECTED", "Connected to DuckDB database")
+  flog.info("[DB_CONNECTED] Connected to DuckDB database")
   
   # Create table and index
   dbExecute(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
@@ -170,30 +174,35 @@ get_user_commits_df <- function(repos, setProgress = NULL,
   # Collect all commit SHAs first for accurate progress tracking
   all_commits <- list()
   if (!is.null(repos)) {
-    log_message("PAGES_PROCESS_START", "Starting repository processing")
-    if (!is.null(setProgress)) {
-      setProgress(message = "🌐 Поиск коммитов:", value = 0)
-    }
+    flog.info("[PAGES_PROCESS] Starting repository processing")
+    
+    setProgress(message = "🌐 Поиск коммитов:", value = 0)
     for (repo in repos) {
       
       repo_name <- repo$full_name
-      log_message("REPO_PROCESS_START",paste0( "Processing repository: ", repo_name))
+      flog.info("[REPO_START] Processing repository: %s", repo_name)
       
       branches_response <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/branches?per_page=100"))
       if (is.null(branches_response)) next
       branches <- content(branches_response, "parsed")
-      log_message("BRANCHES", paste0("Found ", length(branches), " branches in ", repo_name))
+      flog.debug("[BRANCHES] Found %d branches in %s", length(branches), repo_name)
       
       for (branch in branches) {
         branch_name <- branch$name
         url <- paste0("https://api.github.com/repos/", repo_name, "/commits?per_page=100&sha=", branch_name)
-        log_message("COMMITS_PROCESS_START", paste0("Fetching commits for branch: ", branch_name, " (", repo_name, ")"))
+        flog.info("[BRANCH_START] Processing branch: %s (%s)", branch_name, repo_name)
         
         repeat {
           response <- github_api_get(url)
-          if (is.null(response)) break
+          if (is.null(response)) {
+            flog.error("[API_ERROR] Failed to get commits for %s/%s", repo_name, branch_name)
+            break
+            }
           commits <- content(response, "parsed")
-          if (length(commits) == 0) break
+          if (length(commits) == 0) {
+            flog.debug("[NO_COMMITS] No commits in branch %s", branch_name)
+            break
+          }
           
           # Collect commit references
           new_commits <- lapply(commits, function(c) list(
@@ -202,13 +211,12 @@ get_user_commits_df <- function(repos, setProgress = NULL,
             branch = branch_name
           ))
           all_commits <- c(all_commits, new_commits)
-          log_message("SHAS_INFO", paste0("Collected ", length(new_commits), " commit SHAs from ", 
-                             branch_name, " (", repo_name, ")"))
+          flog.trace("[SHAS_ADDED] Added %d SHAs from %s", length(new_commits), branch_name)
           
           # Update collection progress
-          if (!is.null(setProgress)) {
-            setProgress(detail = sprintf("%d", length(all_commits)))
-          }
+          
+          setProgress(detail = sprintf("%d", length(all_commits)))
+          
           
           # Pagination
           link_header <- headers(response)$link
@@ -224,7 +232,7 @@ get_user_commits_df <- function(repos, setProgress = NULL,
   if (total_commits == 0) return(NULL)
   
   # Get existing SHAs from database
-  log_message("SHA'S_IN_DB","Checking existing commits in database")
+  
   existing_shas <- dbGetQuery(con, sprintf("SELECT DISTINCT id FROM %s", COMMITS_TABLE))$id
   
   # Initialize batch processing variables
@@ -236,20 +244,20 @@ get_user_commits_df <- function(repos, setProgress = NULL,
   write_batch <- function() {
     if (length(new_commits_batch) > 0) {
       combined_batch <- do.call(rbind, new_commits_batch)
-      log_message("DB_WRITE_START", sprintf("Writing batch of %d records", nrow(combined_batch)))
+      flog.debug("[DB_WRITE_START] Writing batch of records %s", nrow(combined_batch))
       dbWriteTable(con, COMMITS_TABLE, combined_batch, append = TRUE)
       commits_list <<- c(commits_list, list(combined_batch))
       new_commits_batch <<- list()
       batch_counter <<- 0
-      log_message("DB_WRITE_ENDS", sprintf("Writing batch of %d records", nrow(combined_batch)))
+      flog.debug("DB_WRITE_ENDS")
     }
   }
   
   # Start processing phase
   start_time <- Sys.time()
-  if (!is.null(setProgress)) {
-    setProgress(message = "⚙️ Обработка коммитов:", value = 0)
-  }
+
+  setProgress(message = "⚙️ Обработка коммитов:", value = 0)
+  
   
   for (i in seq_along(all_commits)) {
     commit <- all_commits[[i]]
@@ -258,14 +266,14 @@ get_user_commits_df <- function(repos, setProgress = NULL,
     branch_name <- commit$branch
     
     if (commit_sha %in% existing_shas) {
-      log_message("EXISTING_COMMIT", sprintf("Commit %s already in database", substr(commit_sha, 1, 7)))
+      flog.trace("[EXISTING_COMMIT] Commit %s already in database", substr(commit_sha, 1, 7))
       # Retrieve existing data from DB
       existing_data <- dbGetQuery(con, sprintf("SELECT * FROM %s WHERE id = '%s'", 
                                                COMMITS_TABLE, commit_sha))
       commits_list <- c(commits_list, list(existing_data))
     } else {
       
-      log_message("NEW_COMMIT_START", sprintf("Processing new commit: %s", substr(commit_sha, 1, 7)))
+      flog.trace("[NEW_COMMIT_START] Processing new commit: %s", substr(commit_sha, 1, 7))
       # Process new commit
       
       commit_details <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/commits/", commit_sha))
@@ -308,26 +316,26 @@ get_user_commits_df <- function(repos, setProgress = NULL,
     }
     
     # Update processing progress
-    if (!is.null(setProgress)) {
-      elapsed <- as.numeric(Sys.time() - start_time)
-      remaining <- elapsed * (total_commits - i) / i
-      setProgress(
-        value = i / total_commits,
-        detail = sprintf("%d/%d (%s)",
-                         i, total_commits,
-                         format(.POSIXct(remaining, tz = "GMT"), "%H:%M:%S"))
-      )
-    }
+    
+    elapsed <- as.numeric(Sys.time() - start_time)
+    remaining <- elapsed * (total_commits - i) / i
+    setProgress(
+      value = i / total_commits,
+      detail = sprintf("%d/%d (%s)",
+                       i, total_commits,
+                       format(.POSIXct(remaining, tz = "GMT"), "%H:%M:%S"))
+    )
+    
   }
   
   # Write final batch
   write_batch()
-  log_message("LAST_DATA_WAS_WRITTEN", paste0("Writing final batch of ", batch_counter, " commits"))
-  
+  flog.debug("[LAST_DATA_WAS_WRITTEN], Writing final batch of %s", batch_counter)
   # Combine and return results
   commits_df <- if (length(commits_list) > 0) do.call(rbind, commits_list) else NULL
   final_count <- if (!is.null(commits_df)) nrow(commits_df) else 0
-  log_message("NY, WOT I WSE", paste0("Function completed. Total commits processed: ", final_count))
+  
+  flog.debug("[NY, WOT I WSE], Function completed. Total commits processe %s", final_count)
   return(commits_df)
 }
 
