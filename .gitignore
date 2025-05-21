@@ -6,4 +6,5 @@ test.R
 KPZ.Rproj
 .Renviron
 *.db
-logs.*
+*.log
+*.wal

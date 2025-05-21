@@ -323,233 +323,221 @@ server <- function(input, output, session) {
     update_github_rate_limit()
   })
   
+  # Рендеринг контента для Отчета
   output$user_report <- renderUI({
     profile <- data$user_profile
     if (!is.null(profile)) {
       tags$div(
         class = "user-report",
-        style = "padding: 20px;",
+        style = "max-width: 1012px; margin: 0 auto; padding: 32px 16px; font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;",
         
+        # Заголовок профиля
         tags$div(
-          class = "profile-header",
-          style = "display: flex; align-items: center; margin-bottom: 30px;",
-          
+          style = "display: flex; gap: 32px; margin-bottom: 32px;",
           tags$img(
             src = profile$avatar_url,
-            style = "width: 150px; height: 150px; border-radius: 50%; margin-right: 30px;"
+            style = "width: 260px; height: 260px; border-radius: 50%; border: 1px solid #e1e4e8;"
           ),
           
           tags$div(
-            tags$h1(profile$name, style = "margin: 0 0 10px 0;"),
-            tags$p(profile$bio, style = "font-size: 16px; color: #666;"),
-            tags$div(
-              style = "display: flex; gap: 15px; margin-top: 10px;",
-              tags$span(icon("users"), "Подписчиков: ", profile$followers),
-              tags$span(icon("user-plus"), "Подписок: ", profile$following),
-              tags$span(icon("database"), "Репозиториев: ", profile$public_repos)
-            )
-          )
-        ),
-        
-        tags$div(
-          class = "stats-grid",
-          style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;",
-          
-          # Левая колонка
-          tags$div(
-            class = "stats-column",
-            style = "background: #f8f9fa; padding: 20px; border-radius: 10px;",
+            style = "flex: 1;",
+            tags$h1(
+              style = "font-size: 32px; font-weight: 600; margin: 0 0 8px 0;",
+              profile$name
+            ),
+            tags$p(
+              style = "font-size: 20px; color: #57606a; margin: 0 0 16px 0;",
+              profile$bio
+            ),
             
-            tags$h3(icon("chart-line"), "Активность", style = "margin-top: 0;"),
-            tags$p(icon("calendar"), "Создан: ", format(as.Date(profile$created_at), "%d.%m.%Y")),
-            tags$p(icon("sync"), "Последняя активность: ", format(as.Date(profile$updated_at), "%d.%m.%Y")),
-            tags$p(icon("building"), "Компания: ", profile$company %||% "Не указана"),
-            tags$p(icon("map-marker"), "Локация: ", profile$location %||% "Не указана")
-          ),
-          
-          # Правая колонка
-          tags$div(
-            class = "stats-column",
-            style = "background: #f8f9fa; padding: 20px; border-radius: 10px;",
-            
-            tags$h3(icon("trophy"), "Достижения", style = "margin-top: 0;"),
-            tags$p(icon("star"), "Среднее звёзд на репозиторий: ", round(mean(sapply(data$repos, function(r) r$stars)), 1)),
-            tags$p(icon("code-branch"), "Среднее форков на репозиторий: ", round(mean(sapply(data$repos, function(r) r$forks)), 1)),
-            tags$p(icon("exclamation-triangle"), "Репозиториев с лицензией: ", sum(sapply(data$repos, function(r) r$license != "Нет лицензии")))
-          )
-        ),
-        
-        tags$div(
-          style = "margin-top: 30px;",
-          tags$h3(icon("link"), "Ссылки"),
-          tags$a(
-            href = profile$html_url,
-            target = "_blank",
-            class = "btn btn-primary",
-            style = "margin-right: 10px;",
-            icon("github"), "Профиль GitHub"
-          ),
-          downloadButton(
-            "download_report",
-            label = "Экспорт PDF",
-            class = "btn btn-danger",
-            style = "color: white;"
-          )
-        ),
-        
-        # Добавленный блок с репозиториями
-        tags$div(
-          style = "margin-top: 30px;",
-          tags$h3(icon("folder"), "Репозитории"),
-          lapply(data$repos, function(repo) {
             tags$div(
-              class = "repo-card",
-              style = "border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; background: #f9f9f9;",
-              
-              # Заголовок с иконкой
+              style = "display: flex; gap: 24px; margin-bottom: 16px;",
               tags$div(
-                style = "display: flex; align-items: center; margin-bottom: 12px;",
-                tags$i(class = "fas fa-book", style = "font-size: 24px; margin-right: 8px; color: #0366d6;"),
-                tags$h3(repo$name, style = "margin: 0; font-size: 24px; color: #0366d6;")
+                style = "display: flex; align-items: center; gap: 4px; color: #24292f;",
+                icon("users", class = "fa-lg"),
+                tags$span(style = "font-weight: 600;", profile$followers),
+                tags$span("подписчиков")
               ),
-              
-              # Описание
-              if (!is.null(repo$description) && repo$description != "") {
-                tags$p(
-                  style = "font-size: 14px; color: #586069; margin-bottom: 12px;",
-                  tags$i(class = "fas fa-align-left", style = "margin-right: 8px;"),
-                  repo$description
-                )
-              },
-              
-              # Основные метрики
               tags$div(
-                style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px;",
-                
-                # Язык программирования
-                tags$div(
-                  style = "background: #fff; padding: 8px; border-radius: 4px;",
-                  tags$p(
-                    style = "margin: 0; font-size: 14px; color: #586069;",
-                    tags$i(class = "fas fa-code", style = "margin-right: 8px;"),
-                    "Язык: ", tags$b(repo$language)
-                  )
-                ),
-                
-                # Звёзды
-                tags$div(
-                  style = "background: #fff; padding: 8px; border-radius: 4px;",
-                  tags$p(
-                    style = "margin: 0; font-size: 14px; color: #586069;",
-                    tags$i(class = "fas fa-star", style = "margin-right: 8px; color: #ffd33d;"),
-                    "Звёзды: ", tags$b(repo$stars)
-                  )
-                ),
-                
-                # Форки
-                tags$div(
-                  style = "background: #fff; padding: 8px; border-radius: 4px;",
-                  tags$p(
-                    style = "margin: 0; font-size: 14px; color: #586069;",
-                    tags$i(class = "fas fa-code-branch", style = "margin-right: 8px; color: #28a745;"),
-                    "Форки: ", tags$b(repo$forks)
-                  )
-                ),
-                
-                # Участники
-                tags$div(
-                  style = "background: #fff; padding: 8px; border-radius: 4px;",
-                  tags$p(
-                    style = "margin: 0; font-size: 14px; color: #586069;",
-                    tags$i(class = "fas fa-users", style = "margin-right: 8px; color: #6f42c1;"),
-                    "Участники: ", tags$b(repo$contributors)
-                  )
-                )
+                style = "display: flex; align-items: center; gap: 4px; color: #24292f;",
+                icon("user-plus", class = "fa-lg"),
+                tags$span(style = "font-weight: 600;", profile$following),
+                tags$span("подписки")
               ),
-              
-              # Прогресс-бары для числовых показателей
               tags$div(
-                style = "margin-bottom: 12px;",
-                
-                # Issues
-                tags$div(
-                  style = "margin-bottom: 8px;",
-                  tags$p(
-                    style = "margin: 0 0 4px 0; font-size: 14px; color: #586069;",
-                    tags$i(class = "fas fa-exclamation-circle", style = "margin-right: 8px; color: #d73a49;"),
-                    "Открытые issues:"
-                  ),
-                  tags$div(
-                    style = paste0(
-                      "width: 100%; height: 8px; background: #e1e4e8; border-radius: 4px;",
-                      "position: relative; overflow: hidden;"
-                    ),
-                    tags$div(
-                      style = paste0(
-                        "width: ", (repo$open_issues / max(1, repo$open_issues + 10)) * 100, "%; ",
-                        "height: 100%; background: #d73a49; border-radius: 4px;"
-                      )
-                    )
-                  )
+                style = "display: flex; align-items: center; gap: 4px; color: #24292f;",
+                icon("building", class = "fa-lg"),
+                tags$span(profile$company %||% "Не указана")
+              )
+            ),
+            
+            tags$div(
+              style = "display: flex; gap: 16px;",
+              tags$a(
+                href = profile$html_url,
+                target = "_blank",
+                class = "btn btn-primary",
+                style = paste(
+                  "background: #2da44e; color: white;",
+                  "padding: 8px 16px; border-radius: 6px;",
+                  "text-decoration: none; font-weight: 600;",
+                  "display: flex; align-items: center; gap: 8px;"
                 ),
-                
-                # Размер репозитория
-                tags$div(
-                  style = "margin-bottom: 8px;",
-                  tags$p(
-                    style = "margin: 0 0 4px 0; font-size: 14px; color: #586069;",
-                    tags$i(class = "fas fa-weight", style = "margin-right: 8px; color: #6a737d;"),
-                    "Размер: ", round(repo$size / 1024, 2), " MB"
-                  ),
-                  tags$div(
-                    style = paste0(
-                      "width: 100%; height: 8px; background: #e1e4e8; border-radius: 4px;",
-                      "position: relative; overflow: hidden;"
-                    ),
-                    tags$div(
-                      style = paste0(
-                        "width: ", (repo$size / max(1, repo$size + 10240)) * 100, "%; ",
-                        "height: 100%; background: #6a737d; border-radius: 4px;"
-                      )
-                    )
-                  )
-                )
+                icon("github"),
+                "Профиль GitHub"
               ),
-              
-              # Даты и ссылка
-              tags$div(
-                style = "display: flex; justify-content: space-between; align-items: center; margin-top: 12px;",
-                
-                # Даты
-                tags$div(
-                  style = "font-size: 12px; color: #586069;",
-                  tags$p(
-                    style = "margin: 0;",
-                    tags$i(class = "fas fa-calendar-plus", style = "margin-right: 4px;"),
-                    "Создан: ", format(repo$created_at, "%d.%m.%Y")
-                  ),
-                  tags$p(
-                    style = "margin: 0;",
-                    tags$i(class = "fas fa-calendar-check", style = "margin-right: 4px;"),
-                    "Обновлён: ", format(repo$updated_at, "%d.%m.%Y")
-                  )
-                ),
-                
-                # Ссылка
-                tags$a(
-                  href = repo$url,
-                  target = "_blank",
-                  class = "btn btn-primary",
-                  style = "background: #0366d6; color: #fff; padding: 6px 12px; border-radius: 4px; text-decoration: none;",
-                  tags$i(class = "fas fa-external-link-alt", style = "margin-right: 4px;"),
-                  "Открыть репозиторий"
+              downloadButton(
+                "download_report",
+                label = "Экспорт PDF",
+                class = "btn",
+                style = paste(
+                  "background: #f6f8fa; color: #24292f;",
+                  "border: 1px solid #d0d7de; padding: 8px 16px;",
+                  "font-weight: 600; display: flex; align-items: center; gap: 8px;"
                 )
               )
             )
-          })
+          )
+        ),
+        
+        # Основная статистика
+        tags$div(
+          style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 32px;",
+          tags$div(
+            style = "background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 6px; padding: 24px;",
+            tags$h3(style = "font-size: 20px; margin: 0 0 16px 0;", "📊 Основные метрики"),
+            tags$div(
+              style = "display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;",
+              # Всего репозиториев
+              tags$div(
+                tags$div(style = "color: #57606a;", "Всего репозиториев"),
+                tags$div(style = "font-size: 32px; font-weight: 600;", profile$public_repos)
+              ),
+              # Всего звёзд
+              tags$div(
+                tags$div(style = "color: #57606a;", "Всего звёзд"),
+                tags$div(
+                  style = "font-size: 32px; font-weight: 600;",
+                  sum(sapply(data$repos, function(r) r$stars))
+                )
+              ),
+              # Топ языков
+              tags$div(
+                tags$div(style = "color: #57606a; margin-bottom: 4px;", "Топ языков"),
+                tags$div(
+                  style = "display: flex; flex-direction: column; gap: 4px;",
+                  if (!is.null(data$language_data)) {
+                    top_langs <- head(arrange(data$language_data, desc(count)), 3)
+                    lapply(1:nrow(top_langs), function(i) {
+                      tags$div(
+                        style = "display: flex; align-items: center; gap: 8px;",
+                        tags$span(style = paste(
+                          "width: 12px; height: 12px; border-radius: 50%;",
+                          "background:", switch(top_langs$language[i],
+                                                "R" = "#276DC3",
+                                                "Python" = "#3572A5",
+                                                "JavaScript" = "#F1E05A",
+                                                "#000000"
+                          )
+                        )),
+                        tags$span(top_langs$language[i]),
+                        tags$span(style = "color: #57606a; font-size: 0.9em;", paste0("(", top_langs$count[i], ")"))
+                      )
+                    })
+                  } else {
+                    tags$em("Недостаточно данных", style = "color: #57606a;")
+                  }
+                )
+              )
+            )
+          ),
+          tags$div(
+            style = "background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 6px; padding: 24px;",
+            tags$h3(style = "font-size: 20px; margin: 0 0 16px 0;", "📅 Активность"),
+            tags$div(
+              style = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;",
+              tags$div(
+                tags$div(style = "color: #57606a;", "Создан аккаунт"),
+                tags$div(style = "font-weight: 600;", format(as.Date(profile$created_at), "%d.%m.%Y"))
+              ),
+              tags$div(
+                tags$div(style = "color: #57606a;", "Последняя активность"),
+                tags$div(style = "font-weight: 600;", format(as.Date(profile$updated_at), "%d.%m.%Y"))
+              )
+            )
+          )
+        ),
+        
+        # Сетка репозиториев
+        tags$div(
+          style = "border-top: 1px solid #e1e4e8; padding-top: 32px;",
+          tags$h2(style = "font-size: 24px; margin: 0 0 24px 0;", "📦 Репозитории"),
+          tags$div(
+            style = "display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;",
+            lapply(data$repos, function(repo) {
+              tags$a(
+                href = repo$url,
+                target = "_blank",
+                style = "text-decoration: none; color: inherit;",
+                tags$div(
+                  style = paste(
+                    "border: 1px solid #e1e4e8; border-radius: 6px; padding: 16px;",
+                    "background: white; transition: transform 0.2s, box-shadow 0.2s;",
+                    "&:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }"
+                  ),
+                  tags$div(
+                    style = "display: flex; justify-content: space-between; margin-bottom: 12px;",
+                    tags$h3(
+                      style = "font-size: 16px; font-weight: 600; margin: 0; color: #0969da;",
+                      repo$name
+                    ),
+                    tags$div(
+                      style = "display: flex; align-items: center; gap: 4px; color: #57606a;",
+                      icon("star"),
+                      tags$span(repo$stars)
+                    )
+                  ),
+                  tags$p(
+                    style = "color: #57606a; font-size: 14px; margin: 0 0 16px 0; height: 40px; overflow: hidden;",
+                    repo$description
+                  ),
+                  tags$div(
+                    style = "display: flex; justify-content: space-between; align-items: center;",
+                    tags$div(
+                      style = "display: flex; align-items: center; gap: 8px;",
+                      if(repo$language != "Не указан") {
+                        tags$span(
+                          style = "display: flex; align-items: center; gap: 4px;",
+                          tags$span(style = paste(
+                            "width: 12px; height: 12px; border-radius: 50%;",
+                            "background:", switch(repo$language,
+                                                  "R" = "#276DC3",
+                                                  "Python" = "#3572A5",
+                                                  "JavaScript" = "#F1E05A",
+                                                  "#000000"
+                            )
+                          )),
+                          tags$span(style = "font-size: 12px; color: #57606a;", repo$language)
+                        )
+                      },
+                      tags$span(
+                        style = "display: flex; align-items: center; gap: 4px; font-size: 12px; color: #57606a;",
+                        icon("code-branch"),
+                        repo$forks
+                      )
+                    ),
+                    tags$span(
+                      style = "font-size: 12px; color: #57606a;",
+                      format(as.Date(repo$updated_at), "%d.%m.%Y")
+                    )
+                  )
+                )
+              )
+            })
+          )
         )
       )
-    } else { }
+    }
   })
   
   output$commits_table <- renderDataTable({
