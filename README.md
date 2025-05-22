@@ -10,7 +10,7 @@
 - Установленный RStudio (рекомендуется, но не обязательно)
 - Установленные пакеты:
   ```R
-  install.packages(c("shiny", "httr", "dplyr", "purrr", "DT", "shinycssloaders", "plotly", "ggplot2", "tidyr", "fastDummies", "shinyjs", "shinyBS", "duckdb", "DBI", "litedown", "markdown", "stringr", "jsonlite", "tools", "lubridate", "yaml", "readr"))
+  install.packages(c("shiny", "httr", "dplyr", "purrr", "DT", "shinycssloaders", "plotly", "ggplot2", "tidyr", "fastDummies", "shinyjs", "shinyBS", "duckdb", "DBI", "litedown", "markdown", "stringr", "jsonlite", "tools", "lubridate", "yaml", "readr", "futile.logger"))
   ```
 
 ## Как запустить приложение
@@ -61,7 +61,7 @@
    * Запуск через RStudio:
        1. Откройте склонироавнный репозиторий в RStudio
        2. Откройте файл app.R
-       3. Запустите файл app.R с помощью кнопки в правом верхнем углу Run ![run](presentation/img/run.png)
+       3. Запустите файл app.R с помощью кнопки в правом верхнем углу Run ![run](information/img/run.png)
 
        
    
