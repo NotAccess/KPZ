@@ -128,6 +128,7 @@ get_user_repos <- function(username, setProgress) {
       url = repo$html_url,
       open_issues = repo$open_issues_count,
       contributors = contributors_count,
+      is_fork = repo$fork,  # Поле проверки форки ли это
       license = if (!is.null(repo$license)) repo$license$name else "Нет лицензии",
       size = repo$size
     )

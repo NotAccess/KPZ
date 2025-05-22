@@ -407,11 +407,26 @@ server <- function(input, output, session) {
             style = "background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 6px; padding: 24px;",
             tags$h3(style = "font-size: 20px; margin: 0 0 16px 0;", "📊 Основные метрики"),
             tags$div(
-              style = "display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;",
+              style = "display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 8px;",
               # Всего репозиториев
               tags$div(
-                tags$div(style = "color: #57606a;", "Всего репозиториев"),
-                tags$div(style = "font-size: 32px; font-weight: 600;", profile$public_repos)
+                style = "display: flex; flex-direction: column; margin-right: 12px;",
+                tags$div(
+                  style = paste(
+                    "color: #586069;",
+                    "white-space: nowrap;", # Запрет переноса текста
+                    "letter-spacing: -0.1px;" # Сжатие межбуквенного пространства
+                  ),
+                  "Всего репозиториев"
+                ),
+                tags$div(
+                  style = paste(
+                    "font-size: 32px;",
+                    "font-weight: 600;",
+                    "margin-top: -2px;" # Сдвиг числа вверх
+                  ),
+                  profile$public_repos
+                )
               ),
               # Всего звёзд
               tags$div(
@@ -437,7 +452,25 @@ server <- function(input, output, session) {
                                                 "R" = "#276DC3",
                                                 "Python" = "#3572A5",
                                                 "JavaScript" = "#F1E05A",
-                                                "#000000"
+                                                "Java" = "#B07219",
+                                                "C#" = "#178600",
+                                                "C++" = "#F34B7D",
+                                                "PHP" = "#4F5D95",
+                                                "Swift" = "#FFAC45",
+                                                "Kotlin" = "#A97BFF",
+                                                "Go" = "#00ADD8",
+                                                "Rust" = "#DEA584",
+                                                "TypeScript" = "#3178C6",
+                                                "Ruby" = "#701516",
+                                                "SQL" = "#E38C00",
+                                                "Dart" = "#00B4AB",
+                                                "Scala" = "#DC322F",
+                                                "Perl" = "#39457E",
+                                                "Haskell" = "#5E5086",
+                                                "Lua" = "#000080",
+                                                "MATLAB" = "#E16737",
+                                                "Shell" = "#89E051",
+                                                "#000000" # Дефолтный цвет
                           )
                         )),
                         tags$span(top_langs$language[i]),
@@ -467,129 +500,194 @@ server <- function(input, output, session) {
             )
           )
         ),
-        
-        # Добавляем кнопку управления всеми
         tags$div(
-          style = "display: flex; justify-content: flex-end; margin-bottom: 16px;",
-          actionButton(
-            "toggle_all_repos",
-            "Свернуть все",
-            icon = icon("chevron-down"),
-            class = "btn-link",
-            style = "color: #0969da; border: none; font-weight: 500;"
-          )
-        ),
-        
-        # Модифицируем блок с репозиториями
-        tags$div(
-          id = "repos_container",
-          style = "display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;",
-          lapply(seq_along(data$repos), function(i) {
-            repo <- data$repos[[i]]
-            repo_id <- paste0("repo_", i)
-            
-            tags$div(
-              class = "repo-card",
-              style = "border: 1px solid #e1e4e8; border-radius: 6px; background: white;",
+          style = "border-top: 1px solid #e1e4e8; padding-top: 32px;",
+          tags$h2(style = "font-size: 24px; margin: 0 0 8px 0;", "📦 Репозитории"),
+          tags$p(
+            style = paste(
+              "color: #57606a;",
+              "font-size: 14px;",
+              "margin: 0 0 16px 0;",
+              "border-bottom: 1px solid #f0f0f0;",
+              "padding-bottom: 12px;"
+            ),
+            "Список публичных репозиториев пользователя (всего ", 
+            length(data$repos), 
+            ")"
+          ),
+          # Кнопка управления всеми репозиториями
+          tags$div(
+            style = "display: flex; justify-content: flex-end; margin-bottom: 16px;",
+            actionButton(
+              "toggle_all_repos",
+              "Свернуть",
+              class = "btn-link",
+              style = "color: #0969da; border: none; font-weight: 500;"
+            )
+          ),
+          
+          # Блок с репозиториями
+          tags$div(
+            id = "repos_container",
+            style = "display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; transition: 0.3s all ease;",
+            lapply(seq_along(data$repos), function(i) {
+              repo <- data$repos[[i]]
+              repo_id <- paste0("repo_", i)
+              
               tags$div(
-                class = "repo-header",
-                style = "padding: 16px; cursor: pointer; border-bottom: 1px solid #e1e4e8;",
-                onclick = paste0("$('#", repo_id, "').collapse('toggle')"),
+                id = repo_id,
+                class = "repo-item",
+                style = "transition: all 0.3s ease;",
                 tags$div(
-                  style = "display: flex; justify-content: space-between; align-items: center;",
+                  class = "repo-card",
+                  style = "border: 1px solid #e1e4e8; border-radius: 6px; background: white;",
                   tags$div(
-                    style = "display: flex; align-items: center; gap: 8px;",
-                    tags$h3(
-                      style = "font-size: 16px; font-weight: 600; margin: 0; color: #0969da;",
-                      repo$name
-                    ),
+                    class = "repo-header",
+                    style = "padding: 16px; cursor: pointer; border-bottom: 1px solid #e1e4e8;",
+                    onclick = paste0("$('#", repo_id, "').collapse('toggle')"),
                     tags$div(
-                      style = "display: flex; align-items: center; gap: 4px; color: #57606a;",
-                      icon("star"),
-                      tags$span(repo$stars)
+                      style = "display: flex; justify-content: space-between; align-items: center;",
+                      tags$div(
+                        style = "display: flex; align-items: center; gap: 8px;",
+                        tags$h3(
+                          style = "font-size: 16px; font-weight: 600; margin: 0; color: #0969da;",
+                          repo$name
+                        ),
+                        tags$div(
+                          style = "display: flex; align-items: center; gap: 4px; color: #57606a;",
+                          icon("star"),
+                          tags$span(repo$stars),
+                          if(repo$is_fork) {
+                            tags$span(
+                              style = paste(
+                                "font-size: 0.75em;",
+                                "background: #f0f0f0;",
+                                "border-radius: 12px;",
+                                "padding: 2px 8px;",
+                                "margin-left: 6px;",
+                                "color: #586069;"
+                              ),
+                              "Fork"
+                            )
+                          }
+                        )
+                      )
                     )
                   ),
                   tags$div(
-                    style = "transition: transform 0.3s;",
-                    icon("chevron-down", class = "collapse-icon")
-                  )
-                )
-              ),
-              tags$div(
-                id = repo_id,
-                class = "collapse show",
-                tags$div(
-                  style = "padding: 16px;",
-                  tags$p(
-                    style = "color: #57606a; font-size: 14px; margin: 0 0 16px 0; min-height: 40px;",
-                    repo$description
-                  ),
-                  tags$div(
-                    style = "display: flex; justify-content: space-between; align-items: center;",
+                    id = repo_id,
+                    class = "collapse show",
                     tags$div(
-                      style = "display: flex; align-items: center; gap: 8px;",
-                      if(repo$language != "Не указан") {
-                        tags$span(
-                          style = "display: flex; align-items: center; gap: 4px;",
-                          tags$span(style = paste(
-                            "width: 12px; height: 12px; border-radius: 50%;",
-                            "background:", switch(repo$language,
-                                                  "R" = "#276DC3",
-                                                  "Python" = "#3572A5",
-                                                  "JavaScript" = "#F1E05A",
-                                                  "#000000"
+                      style = "padding: 16px;",
+                      tags$p(
+                        style = "color: #57606a; font-size: 14px; margin: 0 0 16px 0; min-height: 40px;",
+                        repo$description
+                      ),
+                      tags$div(
+                        style = "display: flex; justify-content: space-between; align-items: center;",
+                        tags$div(
+                          style = "display: flex; align-items: center; gap: 12px; flex-wrap: wrap;",
+                          # Блок языка
+                          if(repo$language != "Не указан") {
+                            tags$span(
+                              style = "display: flex; align-items: center; gap: 4px;",
+                              tags$span(style = paste(
+                                "width: 12px; height: 12px; border-radius: 50%;",
+                                "background:", switch(repo$language,
+                                                      "R" = "#276DC3",
+                                                      "Python" = "#3572A5",
+                                                      "JavaScript" = "#F1E05A",
+                                                      "Java" = "#B07219",
+                                                      "C#" = "#178600",
+                                                      "C++" = "#F34B7D",
+                                                      "PHP" = "#4F5D95",
+                                                      "Swift" = "#FFAC45",
+                                                      "Kotlin" = "#A97BFF",
+                                                      "Go" = "#00ADD8",
+                                                      "Rust" = "#DEA584",
+                                                      "TypeScript" = "#3178C6",
+                                                      "Ruby" = "#701516",
+                                                      "SQL" = "#E38C00",
+                                                      "Dart" = "#00B4AB",
+                                                      "Scala" = "#DC322F",
+                                                      "Perl" = "#39457E",
+                                                      "Haskell" = "#5E5086",
+                                                      "Lua" = "#000080",
+                                                      "MATLAB" = "#E16737",
+                                                      "Shell" = "#89E051",
+                                                      "#000000" # Дефолтный цвет
+                                )
+                              )),
+                              tags$span(style = "font-size: 12px; color: #57606a;", repo$language)
                             )
-                          )),
-                          tags$span(style = "font-size: 12px; color: #57606a;", repo$language)
+                          },
+                          tags$div(
+                            style = "display: flex; align-items: center; gap: 8px;",
+                            # Форки
+                            tags$span(
+                              style = "display: flex; align-items: center; gap: 4px;",
+                              icon("code-branch", style = "font-size: 0.9em;"),
+                              tags$span(
+                                style = "font-size: 12px; color: #57606a;",
+                                repo$forks
+                              )
+                            ),
+                            
+                            # Issues
+                            tags$span(
+                              style = "display: flex; align-items: center; gap: 4px;",
+                              icon("exclamation-circle", style = "font-size: 0.9em; color: #d73a49;"),
+                              tags$span(
+                                style = "font-size: 12px; color: #57606a;",
+                                repo$open_issues
+                              )
+                            )
+                          )
+                        ),
+                        tags$span(
+                          style = "font-size: 12px; color: #57606a;",
+                          format(as.Date(repo$updated_at), "%d.%m.%Y")
                         )
-                      },
-                      tags$span(
-                        style = "display: flex; align-items: center; gap: 4px; font-size: 12px; color: #57606a;",
-                        icon("code-branch"),
-                        repo$forks
                       )
-                    ),
-                    tags$span(
-                      style = "font-size: 12px; color: #57606a;",
-                      format(as.Date(repo$updated_at), "%d.%m.%Y")
                     )
                   )
                 )
               )
-            )
-          })
-        ),
-        # Добавляем CSS стили и JavaScript
-        tags$head(
-          tags$style(HTML("
-            .repo-card {
-              transition: all 0.3s ease;
-              overflow: hidden;
-            }
-            .repo-card:hover {
-              transform: translateY(-2px);
-              box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            }
-            .collapse-icon {
-              transition: transform 0.3s ease;
-            }
-            .collapsed .collapse-icon {
-              transform: rotate(-90deg);
-            }
-          ")),
+            })
+          ),
+          
+          # Обновляем JavaScript:
           tags$script(HTML("
             $(document).on('click', '#toggle_all_repos', function() {
               let button = $(this);
-              let isCollapsed = button.text().includes('Развернуть');
-              $('.repo-card .collapse').collapse(isCollapsed ? 'show' : 'hide');
-              button.html(isCollapsed ? 
-                '<i class=\"fa fa-chevron-down\"></i> Свернуть все' : 
-                '<i class=\"fa fa-chevron-up\"></i> Развернуть все');
+              let isHidden = button.text().includes('Развернуть');
+              $('.repo-item').stop(true).fadeToggle(300, 'swing', function() {
+                if($(this).css('opacity') == 0) {
+                  $(this).css('display', 'none');
+                }
+              });
+              button.html(isHidden ? 
+                'Свернуть' : 
+                'Развернуть');
             });
-            
-            $('.repo-header').click(function() {
-              $(this).find('.collapse-icon').toggleClass('collapsed');
+          
+            $(document).on('click', '.repo-header', function() {
+              $(this).closest('.repo-item').stop(true).fadeToggle(300);
             });
+          ")),
+          
+          # Добавляем CSS:
+          tags$style(HTML("
+            .repo-item {
+              opacity: 1;
+              transition: opacity 0.3s ease, transform 0.3s ease;
+            }
+            .repo-item.hidden {
+              opacity: 0;
+              transform: scale(0.9);
+              pointer-events: none;
+              display: none !important;
+            }
           "))
         )
       )
