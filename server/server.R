@@ -468,25 +468,37 @@ server <- function(input, output, session) {
           )
         ),
         
-        # Сетка репозиториев
+        # Добавляем кнопку управления всеми
         tags$div(
-          style = "border-top: 1px solid #e1e4e8; padding-top: 32px;",
-          tags$h2(style = "font-size: 24px; margin: 0 0 24px 0;", "📦 Репозитории"),
-          tags$div(
-            style = "display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;",
-            lapply(data$repos, function(repo) {
-              tags$a(
-                href = repo$url,
-                target = "_blank",
-                style = "text-decoration: none; color: inherit;",
+          style = "display: flex; justify-content: flex-end; margin-bottom: 16px;",
+          actionButton(
+            "toggle_all_repos",
+            "Свернуть все",
+            icon = icon("chevron-down"),
+            class = "btn-link",
+            style = "color: #0969da; border: none; font-weight: 500;"
+          )
+        ),
+        
+        # Модифицируем блок с репозиториями
+        tags$div(
+          id = "repos_container",
+          style = "display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;",
+          lapply(seq_along(data$repos), function(i) {
+            repo <- data$repos[[i]]
+            repo_id <- paste0("repo_", i)
+            
+            tags$div(
+              class = "repo-card",
+              style = "border: 1px solid #e1e4e8; border-radius: 6px; background: white;",
+              tags$div(
+                class = "repo-header",
+                style = "padding: 16px; cursor: pointer; border-bottom: 1px solid #e1e4e8;",
+                onclick = paste0("$('#", repo_id, "').collapse('toggle')"),
                 tags$div(
-                  style = paste(
-                    "border: 1px solid #e1e4e8; border-radius: 6px; padding: 16px;",
-                    "background: white; transition: transform 0.2s, box-shadow 0.2s;",
-                    "&:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }"
-                  ),
+                  style = "display: flex; justify-content: space-between; align-items: center;",
                   tags$div(
-                    style = "display: flex; justify-content: space-between; margin-bottom: 12px;",
+                    style = "display: flex; align-items: center; gap: 8px;",
                     tags$h3(
                       style = "font-size: 16px; font-weight: 600; margin: 0; color: #0969da;",
                       repo$name
@@ -497,8 +509,19 @@ server <- function(input, output, session) {
                       tags$span(repo$stars)
                     )
                   ),
+                  tags$div(
+                    style = "transition: transform 0.3s;",
+                    icon("chevron-down", class = "collapse-icon")
+                  )
+                )
+              ),
+              tags$div(
+                id = repo_id,
+                class = "collapse show",
+                tags$div(
+                  style = "padding: 16px;",
                   tags$p(
-                    style = "color: #57606a; font-size: 14px; margin: 0 0 16px 0; height: 40px; overflow: hidden;",
+                    style = "color: #57606a; font-size: 14px; margin: 0 0 16px 0; min-height: 40px;",
                     repo$description
                   ),
                   tags$div(
@@ -533,8 +556,41 @@ server <- function(input, output, session) {
                   )
                 )
               )
-            })
-          )
+            )
+          })
+        ),
+        # Добавляем CSS стили и JavaScript
+        tags$head(
+          tags$style(HTML("
+            .repo-card {
+              transition: all 0.3s ease;
+              overflow: hidden;
+            }
+            .repo-card:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            }
+            .collapse-icon {
+              transition: transform 0.3s ease;
+            }
+            .collapsed .collapse-icon {
+              transform: rotate(-90deg);
+            }
+          ")),
+          tags$script(HTML("
+            $(document).on('click', '#toggle_all_repos', function() {
+              let button = $(this);
+              let isCollapsed = button.text().includes('Развернуть');
+              $('.repo-card .collapse').collapse(isCollapsed ? 'show' : 'hide');
+              button.html(isCollapsed ? 
+                '<i class=\"fa fa-chevron-down\"></i> Свернуть все' : 
+                '<i class=\"fa fa-chevron-up\"></i> Развернуть все');
+            });
+            
+            $('.repo-header').click(function() {
+              $(this).find('.collapse-icon').toggleClass('collapsed');
+            });
+          "))
         )
       )
     }
