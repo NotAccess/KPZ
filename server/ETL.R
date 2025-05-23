@@ -4,7 +4,9 @@ library(purrr)
 library(duckdb)
 library(DBI)
 library(lubridate)
+
 GITHUB_TOKEN <- Sys.getenv('GITHUB_TOKEN')
+
 github_api_get <- function(url) {
   # обработка запросов по URL к GitHub API
   if (nzchar(GITHUB_TOKEN)) {
