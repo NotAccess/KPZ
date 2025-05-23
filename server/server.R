@@ -211,39 +211,41 @@ server <- function(input, output, session) {
     token <- Sys.getenv("GITHUB_TOKEN")
     if (nzchar(token)) {
       tryCatch({
-        response <- GET(
-          "https://api.github.com/rate_limit",
-          add_headers(
+        req <- request("https://api.github.com/rate_limit") %>%
+          req_headers(
             Accept = "application/vnd.github+json",
-            Authorization = paste("token", token)
+            Authorization = paste("Bearer", token)
           )
-        )
         
-        if (resp_status(response) == 200) {
-          limits <- resp_body_json(response)
-          core_limit <- limits$resources$core
-          remaining <- core_limit$remaining
-          limit <- core_limit$limit
-          reset_time <- as.POSIXct(core_limit$reset, origin = "1970-01-01")
-          
-          output$github_rate_limit <- renderUI({
-            tags$div(
-              class = "rate-limit-box",
-              style = "background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;",
-              tags$h4("GitHub API Rate Limit", style = "margin-top: 0;"),
-              tags$p(
-                style = "margin-bottom: 5px;",
-                tags$b("Использовано: "),
-                sprintf("%d/%d запросов", limit - remaining, limit)
-              ),
-              tags$p(
-                style = "margin-bottom: 0;",
-                tags$b("Сброс: "),
-                format(reset_time, "%H:%M:%S")
-              )
-            )
-          })
+        resp <- req %>% req_perform()
+        
+        if (resp_is_error(resp)) {
+          stop("Request failed")
         }
+        
+        limits <- resp %>% resp_body_json()
+        core_limit <- limits$resources$core
+        remaining <- core_limit$remaining
+        limit <- core_limit$limit
+        reset_time <- as.POSIXct(core_limit$reset, origin = "1970-01-01")
+        
+        output$github_rate_limit <- renderUI({
+          tags$div(
+            class = "rate-limit-box",
+            style = "background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;",
+            tags$h4("GitHub API Rate Limit", style = "margin-top: 0;"),
+            tags$p(
+              style = "margin-bottom: 5px;",
+              tags$b("Использовано: "),
+              sprintf("%d/%d запросов", limit - remaining, limit)
+            ),
+            tags$p(
+              style = "margin-bottom: 0;",
+              tags$b("Сброс: "),
+              format(reset_time, "%H:%M:%S")
+            )
+          )
+        })
       }, error = function(e) {
         output$github_rate_limit <- renderUI({
           tags$div(

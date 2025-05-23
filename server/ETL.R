@@ -144,11 +144,7 @@ get_user_repos <- function(username, setProgress) {
   return(repo_data)
 }
 
-
-
-
-get_user_commits_df <- function(repos, setProgress = NULL,
-                                batch_size = 200, log_file='logs.log') {
+get_user_commits_df <- function(repos, setProgress = NULL, batch_size = 200, log_file='logs.log') {
 
   flog.info("\n-------- FUNCTION START: Commit processing initiated --------")
   #Get variables
