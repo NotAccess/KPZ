@@ -340,88 +340,68 @@ server <- function(input, output, session) {
   output$user_report <- renderUI({
     profile <- data$user_profile
     if (!is.null(profile)) {
-      tagList(
+      tags$div(
+        class = "user-report",
+        style = "padding: 20px;",
+        
         tags$div(
-          class = "user-report",
-          style = "margin: 0 auto; padding: 32px 16px; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif;",
+          class = "profile-header",
+          style = "display: flex; align-items: center; margin-bottom: 30px;",
           
-          # Заголовок профиля
-          tags$div(
-            style = "display: flex; gap: 32px; margin-bottom: 32px;",
-            tags$img(
-              src = profile$avatar_url,
-              style = "width: 260px; height: 260px; border-radius: 50%; border: 1px solid #e1e4e8;"
-            ),
-            
-            tags$div(
-              style = "flex: 1;",
-              tags$h1(
-                style = "font-size: 32px; font-weight: 600; margin: 0 0 8px 0;",
-                profile$name
-              ),
-              tags$p(
-                style = "font-size: 20px; color: #57606a; margin: 0 0 16px 0;",
-                profile$bio
-              ),
-              
-              tags$div(
-                style = "display: flex; gap: 24px; margin-bottom: 16px;",
-                tags$div(
-                  style = "display: flex; align-items: center; gap: 4px; color: #24292f;",
-                  icon("users", class = "fa-lg"),
-                  tags$span(style = "font-weight: 600;", profile$followers),
-                  tags$span("подписчиков")
-                ),
-                tags$div(
-                  style = "display: flex; align-items: center; gap: 4px; color: #24292f;",
-                  icon("user-plus", class = "fa-lg"),
-                  tags$span(style = "font-weight: 600;", profile$following),
-                  tags$span("подписки")
-                ),
-                tags$div(
-                  style = "display: flex; align-items: center; gap: 4px; color: #24292f;",
-                  icon("building", class = "fa-lg"),
-                  tags$span(profile$company %||% "Не указана")
-                )
-              ),
-              
-              tags$div(
-                style = "display: flex; gap: 16px;",
-                tags$a(
-                  href = profile$html_url,
-                  target = "_blank",
-                  class = "btn btn-primary",
-                  style = paste(
-                    "background: #2da44e; color: white;",
-                    "padding: 8px 16px; border-radius: 6px;",
-                    "text-decoration: none; font-weight: 600;",
-                    "display: flex; align-items: center; gap: 8px;"
-                  ),
-                  icon("github"),
-                  "Профиль GitHub"
-                )
-              )
-            )
+          tags$img(
+            src = profile$avatar_url,
+            style = "width: 150px; height: 150px; border-radius: 50%; margin-right: 30px;"
           ),
           
-          # Основная статистика
           tags$div(
-            style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 32px;",
+            tags$h1(profile$name, style = "margin: 0 0 10px 0;"),
+            tags$p(profile$bio, style = "font-size: 16px; color: #666;"),
             tags$div(
-              style = "background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 6px; padding: 24px;",
-              tags$h3(style = "font-size: 20px; margin: 0 0 16px 0;", "📅 Активность"),
-              tags$div(
-                style = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;",
-                tags$div(
-                  tags$div(style = "color: #57606a;", "Создан аккаунт"),
-                  tags$div(style = "font-weight: 600;", format(as.Date(profile$created_at), "%d.%m.%Y"))
-                ),
-                tags$div(
-                  tags$div(style = "color: #57606a;", "Последняя активность"),
-                  tags$div(style = "font-weight: 600;", format(as.Date(profile$updated_at), "%d.%m.%Y"))
-                )
+              style = "display: flex; gap: 15px; margin-top: 10px;",
+              tags$span(icon("users"), "Подписчиков: ", profile$followers),
+              tags$span(icon("user-plus"), "Подписок: ", profile$following),
+              tags$span(icon("database"), "Репозиториев: ", profile$public_repos)
+            ),
+            tags$div(
+              style = "margin-top: 30px;",
+              tags$a(
+                href = profile$html_url,
+                target = "_blank",
+                class = "btn btn-primary",
+                style = "margin-right: 10px;",
+                icon("github"), "Профиль GitHub"
               )
             )
+          )
+          
+          
+        ),
+        
+        tags$div(
+          class = "stats-grid",
+          style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;",
+          
+          # Левая колонка
+          tags$div(
+            class = "stats-column",
+            style = "background: #f8f9fa; padding: 20px; border-radius: 10px;",
+            
+            tags$h3(icon("chart-line"), "Активность", style = "margin-top: 0;"),
+            tags$p(icon("calendar"), "Создан: ", format(as.Date(profile$created_at), "%d.%m.%Y")),
+            tags$p(icon("sync"), "Последняя активность: ", format(as.Date(profile$updated_at), "%d.%m.%Y")),
+            tags$p(icon("building"), "Компания: ", profile$company %||% "Не указана"),
+            tags$p(icon("map-marker"), "Локация: ", profile$location %||% "Не указана")
+          ),
+          
+          # Правая колонка
+          tags$div(
+            class = "stats-column",
+            style = "background: #f8f9fa; padding: 20px; border-radius: 10px;",
+            
+            tags$h3(icon("trophy"), "Достижения", style = "margin-top: 0;"),
+            tags$p(icon("star"), "Среднее звёзд на репозиторий: ", round(mean(sapply(data$repos, function(r) r$stars)), 1)),
+            tags$p(icon("code-branch"), "Среднее форков на репозиторий: ", round(mean(sapply(data$repos, function(r) r$forks)), 1)),
+            tags$p(icon("exclamation-triangle"), "Репозиториев с лицензией: ", sum(sapply(data$repos, function(r) r$license != "Нет лицензии")))
           )
         )
       )
