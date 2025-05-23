@@ -995,7 +995,7 @@ server <- function(input, output, session) {
               tags$div(
                 style = "display: flex; gap: 8px; color: #586069;",
                 icon("comment-dots"),
-                tags$em(ifelse(nzchar(commit$message) > 30, paste0(substr(commit$message, 1, 30), "..."), commit$message))
+                tags$em(ifelse(nchar(commit$message) > 30, paste0(substr(commit$message, 1, 30), "..."), commit$message))
               )
             ),
             
