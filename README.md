@@ -7,13 +7,9 @@
 ## Требования
 
 - Установленный [R версии 4.0 и выше](https://www.r-project.org/);
-- Установленный RStudio (рекомендуется, но не обязательно);
-- Установленные пакеты:
-  ```R
-  install.packages(c("shiny", "httr", "dplyr", "purrr", "DT", "shinycssloaders", "plotly", "ggplot2", "tidyr", "fastDummies", "shinyjs", "shinyBS", "duckdb", "DBI", "litedown", "markdown", "stringr", "jsonlite", "tools", "lubridate", "yaml", "readr", "futile.logger"))
-  ```
+- Установленный [RStudio версии 2024.09 и выше](https://posit.co/download/rstudio-desktop/) (рекомендуется, но не обязательно);
 
-## Как запустить приложение
+## Первичная настройка
 1. Склонируйте репозиторий:
    ```bash
    git clone https://github.com/NotAccess/KPZ
@@ -22,7 +18,13 @@
    ```R
    setwd("путь/к/папке/с/файлами")
    ```
-3. Запустите приложение
+3. Установленные пакеты:
+  ```R
+  install.packages(c("shiny", "httr", "dplyr", "purrr", "DT", "shinycssloaders", "plotly", "ggplot2", "tidyr", "fastDummies", "shinyjs", "shinyBS", "duckdb", "DBI", "litedown", "markdown", "stringr", "jsonlite", "tools", "lubridate", "yaml", "readr", "futile.logger"))
+  ```
+
+## Как запустить приложение
+1. Запустите приложение
    * Запуск через консоль R:
    ```bash
      shiny::runApp()
@@ -32,7 +34,7 @@
        2. Откройте файл app.R
        3. Запустите файл app.R с помощью кнопки в правом верхнем углу Run ![run](information/img/run.png)
        
-4. Настройте переменные окружения:
+2. Настройте переменные окружения:
    * Выберите вкладку настройки
    * Заполните переменные: 
      ```
@@ -44,7 +46,7 @@
      ```
      ![](information/img/par.jpeg)
    * Сохраните настройки
-5. Вновь запустите приложение 
+3. Вновь запустите приложение 
 
 > [!TIP]
 > **Где взять данные:**
