@@ -343,7 +343,7 @@ server <- function(input, output, session) {
       tagList(
         tags$div(
           class = "user-report",
-          style = "max-width: 1012px; margin: 0 auto; padding: 32px 16px; font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;",
+          style = "margin: 0 auto; padding: 32px 16px; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif;",
           
           # Заголовок профиля
           tags$div(
@@ -743,17 +743,90 @@ server <- function(input, output, session) {
     }
   })
   
-  
-  
   output$commit_heatmap <- renderPlotly({
-    if (!is.null(data$commit_heatmap_data)) {
-      ggplotly(
-        ggplot(data$commit_heatmap_data, aes(x = hour, y = day, fill = count)) +
-          geom_tile() +
-          scale_fill_gradient(low = "white", high = "red") +
-          labs(title = "Активность", x = "Час", y = "День недели")
+    req(data$commit_heatmap_data)
+    
+    # Рассчитываем общее количество коммитов по дням
+    daily_stats <- data$commit_heatmap_data %>%
+      group_by(day) %>%
+      mutate(
+        day_total = sum(count),
+        percent_of_day = ifelse(day_total > 0, round(100 * count / day_total, 1), 0)
+      ) %>%
+      summarise(
+        day_total = first(day_total),
+        peak_hour = hour[which.max(count)],
+        peak_count = max(count),
+        .groups = "drop"
       )
-    }
+    
+    # Объединяем с основными данными
+    heatmap_data <- data$commit_heatmap_data %>%
+      left_join(daily_stats, by = "day") %>%
+      mutate(
+        percent_of_day = ifelse(day_total > 0, round(100 * count / day_total, 1), 0),
+        hour_label = sprintf("%02d:00-%02d:00", hour, hour+1)
+      )
+    
+    max_count <- max(heatmap_data$count)
+    
+    plot_ly() %>%
+      add_heatmap(
+        data = heatmap_data,
+        x = ~hour, 
+        y = ~day, 
+        z = ~count,
+        colors = c("#f7fbff", "#deebf7", "#c6dbef", "#9ecae1", 
+                   "#6baed6", "#4292c6", "#2171b5", "#08519c", "#08306b"),
+        hoverinfo = "text",
+        text = ~paste0(
+          "<b>", day, "</b><br>",
+          "<b>Время:</b> ", hour_label, "<br>",
+          "<b>Коммитов:</b> ", count, " (", percent_of_day, "% дня)<br>",
+          "<b>Пиковая активность:</b> ", peak_hour, ":00 (", peak_count, " коммитов)<br>",
+          "<b>Всего за день:</b> ", day_total, " коммитов"
+        ),
+        showscale = TRUE,
+        colorbar = list(
+          title = "Коммитов",
+          tickvals = seq(0, max_count, length.out = min(5, max_count + 1)),
+          tickformat = ",d"
+        )
+      ) %>%
+      add_annotations(
+        data = daily_stats,
+        x = 24.5,
+        y = ~day,
+        text = ~paste0(
+          "📊 Всего: ", day_total, "\n",
+          "🕒 Пик: ", peak_hour, ":00"
+        ),
+        showarrow = FALSE,
+        xanchor = "left",
+        font = list(size = 10)
+      ) %>%
+      layout(
+        title = list(
+          text = "<b>Распределение коммитов по времени</b><br><sub>Процент от общего числа коммитов в день</sub>",
+          font = list(size = 18),
+          x = 0.05
+        ),
+        xaxis = list(
+          title = "Час дня",
+          tickvals = 0:23,
+          range = c(-0.5, 27)
+        ),
+        yaxis = list(
+          title = "",
+          tickfont = list(size = 12)
+        ),
+        margin = list(l = 100, r = 150, t = 80),
+        hoverlabel = list(
+          bgcolor = "white",
+          font = list(size = 12)
+        )
+      ) %>%
+      config(displayModeBar = FALSE)
   })
   
   output$pca_plot <- renderPlotly({
@@ -942,7 +1015,7 @@ server <- function(input, output, session) {
               tags$div(
                 style = "display: flex; gap: 8px; color: #586069;",
                 icon("comment-dots"),
-                tags$em(commit$message)
+                tags$em(ifelse(nzchar(commit$message) > 30, paste0(substr(commit$message, 1, 30), "..."), commit$message))
               )
             ),
             

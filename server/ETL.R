@@ -414,25 +414,50 @@ prepare_language_data <- function(repos) {
 }
 
 prepare_commit_heatmap_data <- function(commits) {
-  # Строит тепловую карту по дате коммита
-  if (is.null(commits)) {
-    return(NULL)
-  }
-
-  commits <- commits %>%
-    distinct(id, .keep_all = TRUE) %>%
-    mutate(date = as.POSIXct(date, format = "%Y.%m.%d %H:%M", tz = "UTC")) %>%
-    filter(!is.na(date))
-
-  commits <- commits %>%
+  # Устанавливаем локаль на английскую для корректного определения дней недели
+  Sys.setlocale("LC_TIME", "C")
+  
+  commits %>%
     mutate(
-      day = factor(weekdays(date, abbreviate = FALSE), levels = c("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")),
-      hour = as.integer(format(date, "%H"))
+      date = as.POSIXct(date, format = "%Y.%m.%d %H:%M:%S"),
+      hour = as.integer(format(date, "%H")),
+      day_number = as.POSIXlt(date)$wday, # 0-6 (воскресенье = 0)
+      day = factor(
+        case_when(
+          day_number == 0 ~ "Вс",
+          day_number == 1 ~ "Пн",
+          day_number == 2 ~ "Вт",
+          day_number == 3 ~ "Ср",
+          day_number == 4 ~ "Чт",
+          day_number == 5 ~ "Пт",
+          day_number == 6 ~ "Сб"
+        ),
+        levels = c("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"),
+        ordered = TRUE
+      )
+    ) %>%
+    count(day, hour, name = "count") %>%
+    complete(day, hour = 0:23, fill = list(count = 0)) %>%
+    # Возвращаем локаль обратно
+    { Sys.setlocale("LC_TIME", ""); . }
+}
+
+prepare_commit_stats <- function(commits) {
+  if (is.null(commits)) return(NULL)
+  
+  commits %>%
+    mutate(
+      # Явное преобразование строки в дату
+      date = as.POSIXct(date, format = "%Y.%m.%d %H:%M:%S"),
+      weekday = lubridate::wday(date, week_start = 1, label = TRUE, abbr = FALSE, locale = "ru_RU.UTF-8"),
+      hour = lubridate::hour(date)
+    ) %>%
+    group_by(weekday, hour) %>%
+    summarise(total = n(), .groups = 'drop') %>%
+    arrange(desc(total)) %>%
+    slice(1) %>%
+    transmute(
+      top_day = stringr::str_to_title(as.character(weekday)), # Русские названия с заглавной
+      top_hour = sprintf("%02d:00-%02d:00", hour, hour+1)
     )
-
-  heatmap_data <- commits %>%
-    group_by(hour, day) %>%
-    summarise(count = n(), .groups = "drop")
-
-  return(heatmap_data)
 }
