@@ -6,8 +6,8 @@
 
 ## Требования
 
-- Установленный R (https://www.r-project.org/) (R ≥ 4.0)
-- Установленный RStudio (рекомендуется, но не обязательно)
+- Установленный [R версии 4.0 и выше](https://www.r-project.org/);
+- Установленный RStudio (рекомендуется, но не обязательно);
 - Установленные пакеты:
   ```R
   install.packages(c("shiny", "httr", "dplyr", "purrr", "DT", "shinycssloaders", "plotly", "ggplot2", "tidyr", "fastDummies", "shinyjs", "shinyBS", "duckdb", "DBI", "litedown", "markdown", "stringr", "jsonlite", "tools", "lubridate", "yaml", "readr", "futile.logger"))
