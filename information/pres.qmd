@@ -21,7 +21,10 @@ format:
 ## Архитектура
 
 Форма представления проекта: shiny-приложение
-<div style="text-align: center;"><br><img src="img/arck.png" width="80%"></div>
+
+::: {style="text-align: center;"}
+<br><img src="img/arck.png" width="80%"/>
+:::
 
 ## Стек технологий
 
@@ -29,7 +32,7 @@ format:
 
 -   Backend: R
 -   Frontend: Shiny
--   Data processing: dplyr, purrr, httr, dummy
+-   Data processing: dplyr, purrr, httr2, dummy
 -   Визуализация: ggplot2, plotly, heatmaps
 -   ML: PCA
 -   Интеграции: GitHub API v3
@@ -37,13 +40,17 @@ format:
 # Фаза ETL данных
 
 ## Работа с репозиториями
-::: {.columns}
+
+::::: columns
 ::: {.column width="30%"}
 ### GitHub API
-<img src="img/github-mark.png" width="80%" />
-::: 
+
+<img src="img/github-mark.png" width="80%"/>
+:::
+
 ::: {.column width="70%"}
 ### Поэтапное формирование ETL
+
 1.  Получение списка репозиториев разработчика;
 2.  На основе полученной информации о репозиториях:
     1.  Формирование списка коммитов;
@@ -51,266 +58,97 @@ format:
     3.  Формирование списка используемых ЯП;
     4.  Формирование тепловой карты по датам коммитов.
 :::
-:::
+:::::
 
-## Программная реализация 
-::: {.columns}
+## Программная реализация
+
+::::: columns
 ::: {.column width="50%"}
 ### Используемые библиотеки:
-- httr - зашрузка данных из API;
-- dplyr - очистка, преобразование и агрегирование данных, полученных из API; 
-- purrr - преобразование данных и обработка ошибок. 
+
+-   httr2 - загрузка данных из API;
+-   dplyr - очистка, преобразование и агрегирование данных, полученных из API;
+-   purrr - преобразование данных и обработка ошибок.
 :::
+
 ::: {.column width="50%"}
-### Реализованные функции:
-- github_api_get
-- get_user_repos
-- get_user_commits_dа
-- prepare_language_data
-- prepare_commit_heatmap_data
-:::
-:::
-
-## github_api_get
-```R
-github_api_get <- function(url) {
-  ...
-  return(response)
-}
-```
-Принимает URL GitHub API в качестве аргумента и возвращает объект ответа (response) от сервера GitHub после выполнения GET-запроса. Она также обрабатывает различные сценарии ошибок и предупреждений, связанные с API.
-
-Входные данные:
-
-- url - URL-адрес
-
-Выходные данные:
-
-- response - ответ от GitHub API
-
-## get_user_repos
-
-```R
-get_user_repos <- function(username, setProgress = NULL) {
-  ...
-  return(repo_data)
-}
-```
-Функция предназначена для получения списка репозиториев пользователя. Она использует API GitHub, разбивает запрос на страницы, если репозиториев много, и возвращает список с информацией о каждом репозитории.
-
-Входные данные: 
-
-- url - URL-адрес
-- setProgress (необязательный) - отображение прогресса выполнения
-
-Выходные данные:
-
-- repo_data - список информации о репозиториях пользователя
-
-## get_user_commits_df
-```R
-get_user_commits_df <- function(repos, setProgress = NULL) {
-  commits_df <- data.frame(
-    id = character(),
-    repo = character(),
-    author = character(),
-    date = as.POSIXct(character()),
-    filename = character(),
-    status = character(),
-    additions = numeric(),
-    deletions = numeric(),
-    changes = numeric(),
-    message = character(),
-    branch = character(),  # добавляем поле для ветки
-    stringsAsFactors = FALSE
-  )
-  ...
-  return(commits_df)
-}
-```
-
----
-
-Извлекает информацию о коммитах из всех веток указанных репозиториев GitHub и формирует таблицу с характеристиками каждого коммита и измененных файлов.
-
-Входные данные: 
-
-- repos - список объектов, представляющих репозитории GitHub
-- setProgress (необязательный) - отображение прогресса выполнения
-
-Выходные данные:
-
-- commits_df - data frame, содержащий информацию о коммитах.
-
-## prepare_language_data
-```R
-prepare_language_data <- function(repos) {
-  ...
-  return(language_data)
-}
-```
-Анализирует список репозиториев и формирует сводную таблицу с информацией о языках программирования, используемых в этих репозиториях.
-
-Входные данные: 
-
-- repos - список объектов, представляющих репозитории GitHub
-
-Выходные данные:
-
-- language_data - data frame, содержащий информацию об использовании языков.
-
-## prepare_commit_heatmap_data
-```R
-prepare_commit_heatmap_data <- function(commits) {
-  ...
-  return(heatmap_data)
-}
-```
-
-Подготавливает данные о коммитах для построения тепловой карты, показывающей распределение коммитов по дням недели и часам суток.
-
-Входные данные: 
-
-- commits - data frame,содержащий информацию о коммитах.
-
-Выходные данные:
-
-- heatmap_data - data frame, пригодный для построения тепловой карты.
 
 # Фаза аналитики & ML
 
 ## Обработка данных
-::: {.columns}
+
+::::: columns
 ::: {.column width="50%"}
 Анализ характера вносимых изменений производится подсчётом количества добавленных, удалённых и изменённых строк.
 
 Создание профиля разработчика происходит на основе данных о коммитах в его репозиториях. Подсчёт аномалий, на данный момент, высчитывается Методом главных компонент.
 :::
+
 ::: {.column width="50%"}
 ### Нормализация данных, поэтапно:
+
 1.  С помощью dummy, признаки разбиваются с категориальных на некатегориальные;
 2.  Агрегация данных о коммитах;
 3.  Нормализация методом MinMax;
 4.  Определение главных компонентов;
 5.  Определение аномалий по порогу выброса.
 :::
-:::
+:::::
 
-## Программная реализация 
-::: {.columns}
+## Программная реализация
+
+::::: columns
 ::: {.column width="65%"}
 ### Используемые библиотеки:
-- dplyr - манипуляция данными (фильтрация, агрегация);
-- tidyr - работа с "чистыми" данными, преобразование структуры таблиц;
-- fastDummies - создание dummy-переменных;
-- ggplot2, plotly - визуализация результатов;
-- tools - вспомогательные утилиты для работы с файлами;
-- httr - работа с HTTP-запросами;
-- yaml - чтение и парсинг YAML-файлов.
+
 :::
+
 ::: {.column width="35%"}
-### Реализованные функции:
-- perform_pca
-- detect_outliers
-:::
-:::
-
-## perform_pca
-```R
-perform_pca <- function(commits, scale = TRUE) {
-  ...
-  return(pca_data)
-}
-```
-
-Выполняет анализ главных компонент (PCA) на данных о коммитах в репозиториях. Она включает предварительную обработку данных, агрегацию, вычисление PCA и возвращает результаты в удобном формате.
-
-Входные данные:
-
-- commits - датафрейм с данными о коммитах (обязательный параметр)
-- scale - логическое значение, указывающее нужно ли масштабировать данные перед PCA (по умолчанию TRUE)
-
-## perform_pca
-```R
-perform_pca <- function(commits, scale = TRUE) {
-  ...
-  return(pca_data)
-}
-```
-Выходные данные:
-
-- pca_data - датафрейм, содержащий:
-    - Мета-данные (id, author)
-    - Патчи (объединенные тексты изменений)
-    - Координаты по главным компонентам
-    - Евклидово расстояние от центра (поле distance)
-    
-## detect_outliers
-```R  
-detect_outliers <- function(pca_data, threshold = 2) {
-  ...
-  return(outliers)
-}
-```
-Находит аномальные коммиты по расстояниям из PCA через z-оценки.
-
-
-Входные данные:
-
-- pca_data - датафрейм с результатами PCA (обязательный параметр), содержащий:
-    - distance - евклидово расстояние от центра
-    - id - идентификатор коммита
-    - author - автор коммита
-    - patches - тексты изменений
-- threshold - пороговое значение для z-оценки (по умолчанию 2)
-    
-## detect_outliers
-```R  
-detect_outliers <- function(pca_data, threshold = 2) {
-  ...
-  return(outliers)
-}
-```
-Выходные данные:
-
-- outliers - датафрейм с обнаруженными выбросами, содержащий:
-    - id - идентификатор коммита
-    - author - автор коммита
-    - distance - евклидово расстояние
-    - z_score - стандартизированная z-оценка расстояния
-    - patches - тексты изменений
 
 # Фаза визуализации
 
 ## Shiny
+
 Визуализация простроена на Shiny.
 
-<div style="text-align: center;"> <img src="img/Shiny_hex_logo.png" width="45%"> </div>
+::: {style="text-align: center;"}
+<img src="img/Shiny_hex_logo.png" width="45%"/>
+:::
 
 ## Автоотчёт
-<img src="img/export.png" width="100%">
+
+<img src="img/export.png" width="100%"/>
 
 # Документация
 
 ## Документация в README
-<div style="text-align: center;"><img src="img/readme.png" width="80%"></div>
+
+::: {style="text-align: center;"}
+<img src="img/readme.png" width="80%"/>
+:::
 
 # Прототип
 
 ## Список репозиториев
-<img src="img/strt.png" width="100%">
+
+<img src="img/strt.png" width="100%"/>
 
 ## Список коммитов
-<img src="img/coms.png" width="100%">
+
+<img src="img/coms.png" width="100%"/>
 
 ## События
-<img src="img/haps.png" width="100%">
+
+<img src="img/haps.png" width="100%"/>
 
 ## Распределение используемых языков
-<img src="img/langs.png" width="100%">
+
+<img src="img/langs.png" width="100%"/>
 
 ## Тепловая карта активности
-<img src="img/acts.png" width="100%">
+
+<img src="img/acts.png" width="100%"/>
 
 ## Подсчёт аномалий
-<img src="img/pca.png" width="100%">
+
+<img src="img/pca.png" width="100%"/>
