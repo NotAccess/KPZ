@@ -47,13 +47,10 @@ format:
 
 ## Работа с репозиториями
 
-:::: columns
-::: {.column width="30%"}
 ### GitHub API
 
 <img src="img/github-mark.png" width="80%"/>
-:::
-::::
+
 
 ## Поэтапное формирование ETL
 
@@ -70,8 +67,8 @@ format:
 
 -   httr2 - загрузка данных из API;
 -   dplyr - очистка, преобразование и агрегирование данных, полученных из API;
--   purrr - преобразование данных и обработка ошибок.
--   futile.logger - логирование
+-   purrr - преобразование данных и обработка ошибок;
+-   futile.logger - логирование.
 
 # Фаза аналитики & ML
 
@@ -115,8 +112,8 @@ format:
 
 ### Производные
 
-::: column-page
-<img src="img/prois.png" width="80%"/>
+::: {style="text-align: center; width=200%"}
+<img src="img/skelet.png"/>
 :::
 
 ## Программная реализация
@@ -140,7 +137,7 @@ format:
 -   Нормальные файлы: пустой массив analysis.
 -   Аномальные файлы: структура строго по следующей схеме:
 
-```{json}
+```
 {
   "analysis": [
     {
@@ -169,7 +166,7 @@ format:
 
 ## Автоотчёт
 
-<img src="img/otchet.png" width="100%"/>
+<img src="img/profile.png" width="100%"/>
 
 # Документация
 
@@ -189,7 +186,7 @@ format:
 
 ## Список репозиториев
 
-<img src="img/strt.png" width="100%"/>
+<img src="img/repos.png" width="100%"/>
 
 ## Список коммитов
 
