@@ -34,7 +34,17 @@ filter_repos <- function(repos, filters) {
 
 server <- function(input, output, session) {
   needs_restart <- FALSE
+  sidebar_state <- reactiveVal(FALSE)
   
+  # Обработчик клика по кнопке
+  observeEvent(input$toggle_sidebar, {
+    sidebar_state(!sidebar_state())
+    shinyjs::toggleClass("main_layout", "sidebar-collapsed")
+    
+    # Меняем иконку кнопки
+    icon_name <- if (sidebar_state()) "angle-double-right" else "angle-double-left"
+    updateActionButton(session, "toggle_sidebar", icon = icon(icon_name))
+  })
   # Проверка и инициализация .Renviron
   init_renviron <- function() {
     renv_path <- file.path(getwd(), ".Renviron")
@@ -327,6 +337,7 @@ server <- function(input, output, session) {
   output$user_report <- renderUI({
     profile <- data$user_profile
     if (!is.null(profile)) {
+      tagList(
       tags$div(
         class = "user-report",
         style = "max-width: 1012px; margin: 0 auto; padding: 32px 16px; font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;",
@@ -385,16 +396,6 @@ server <- function(input, output, session) {
                 ),
                 icon("github"),
                 "Профиль GitHub"
-              ),
-              downloadButton(
-                "download_report",
-                label = "Экспорт PDF",
-                class = "btn",
-                style = paste(
-                  "background: #f6f8fa; color: #24292f;",
-                  "border: 1px solid #d0d7de; padding: 8px 16px;",
-                  "font-weight: 600; display: flex; align-items: center; gap: 8px;"
-                )
               )
             )
           )
@@ -690,6 +691,51 @@ server <- function(input, output, session) {
             }
           "))
         )
+      ),
+      
+      # Секция с визуализациями
+      tags$div(
+        style = "max-width: 1012px; margin: 0 auto; padding: 32px 16px;",
+        
+        # Графики активности
+        tags$div(
+          style = "margin-bottom: 40px;",
+          tags$h2("📈 Активность", style = "font-size: 24px; border-bottom: 1px solid #eee; padding-bottom: 8px;"),
+          withSpinner(plotlyOutput("activity_plot", height = "400px"))
+        ),
+        
+        # Языки программирования
+        tags$div(
+          style = "margin-bottom: 40px;",
+          tags$h2("📚 Языки программирования", style = "font-size: 24px; border-bottom: 1px solid #eee; padding-bottom: 8px;"),
+          withSpinner(plotlyOutput("language_plot", height = "400px"))
+        ),
+        
+        # Тепловая карта
+        tags$div(
+          style = "margin-bottom: 40px;",
+          tags$h2("🌡️ Тепловая карта коммитов", style = "font-size: 24px; border-bottom: 1px solid #eee; padding-bottom: 8px;"),
+          withSpinner(plotlyOutput("commit_heatmap", height = "400px"))
+        ),
+        
+        # Анализ PCA
+        tags$div(
+          style = "margin-bottom: 40px;",
+          tags$h2("🔍 Анализ аномалий (PCA)", style = "font-size: 24px; border-bottom: 1px solid #eee; padding-bottom: 8px;"),
+          tags$div(
+            style = "display: grid; grid-template-columns: 1fr 1fr; gap: 20px;",
+            withSpinner(plotlyOutput("pca_plot", height = "500px")),
+            withSpinner(uiOutput("outlier_cards"))
+          )
+        ),
+        
+        # Таблица коммитов
+        tags$div(
+          style = "margin-bottom: 40px;",
+          tags$h2("📄 История коммитов", style = "font-size: 24px; border-bottom: 1px solid #eee; padding-bottom: 8px;"),
+          withSpinner(dataTableOutput("commits_table"))
+        )
+      )
       )
     }
   })

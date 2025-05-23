@@ -25,6 +25,27 @@ licenses <- c("Все", "MIT", "Apache 2.0", "GPL", "Другая")
 
 ui <- fluidPage(
   tags$head(
+    # Добавляем CSS для анимации и стилей
+    tags$style(HTML("
+      #main_layout.sidebar-collapsed .col-sm-4 {
+        margin-left: -100%;
+        transition: margin 0.3s ease;
+      }
+      #main_layout.sidebar-collapsed .col-sm-8 {
+        width: 100%;
+        max-width: 100%;
+        flex: 0 0 100%;
+        transition: width 0.3s ease;
+      }
+      #toggle_sidebar {
+        background: none;
+        border: none;
+        position: absolute;
+        right: 15px;
+        top: 15px;
+        z-index: 1000;
+      }
+    ")),
     tags$script(HTML("
     $(document).on('shiny:connected', function() {
       // Добавляем выпадающий список для выбора столбца поиска
@@ -68,9 +89,15 @@ ui <- fluidPage(
     });
   "))
   ),
-
+  
   useShinyjs(),
-  titlePanel(texts$title),
+  titlePanel(
+    div(
+      texts$title,
+      actionButton("toggle_sidebar", "", icon = icon("angle-double-left"),
+                   style = "position: relative;" # Для позиционирования кнопки
+      )
+    )),
   tags$script(HTML("
     $(document).on('keyup', '#user_input', function(e) {
       if(e.keyCode == 13) {
@@ -78,159 +105,161 @@ ui <- fluidPage(
       }
     });
   ")),
-
-  sidebarLayout(
-    sidebarPanel(
-      # Поле ввода пользователя
-      textInput("user_input", texts$user_input_label, placeholder = texts$user_input_placeholder),
-
-      # Контейнер для кнопок
-      tags$div(
-        class = "button-container",
-        actionButton("submit_button", icon = icon("search"), texts$submit_button, class = "submit-button", style = "background-color: #0366d6; color: white;"),
-        actionButton("toggle_filters", icon = icon("filter"), texts$toggle_filters_button, class = "toggle-button", style = "background-color: #28a745; color: white;")
-      ),
-
-      # Контейнер для фильтров
-      tags$div(
-        id = "filters",
-        style = "margin-top: 20px;",
-
-        # Группа фильтров по датам
-        tags$div(
-          class = "filter-group",
-          style = "border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px;",
-          tags$h4(icon("calendar"), " Фильтры по датам", style = "margin-top: 0;"),
-
-          dateRangeInput(
-            "created_date_range",
-            label = tags$span(icon("plus-circle"), texts$created_date_label),
-            start = "2008-04-10", # Дата начала работы GitHub
-            end = Sys.Date() + 1,
-            format = "dd.mm.yyyy",
-            language = "ru"
-          ),
-          dateRangeInput(
-            "updated_date_range",
-            label = tags$span(icon("sync"), texts$updated_date_label),
-            start = Sys.Date() - 365,
-            end = Sys.Date() + 1,
-            format = "dd.mm.yyyy",
-            language = "ru"
-          )
-        ),
-
-        # Группа фильтров по языкам и лицензиям
-        tags$div(
-          class = "filter-group",
-          style = "border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px;",
-          tags$h4(icon("code"), " Фильтры по языкам и лицензиям", style = "margin-top: 0;"),
-
-          selectInput(
-            "language_filter",
-            label = tags$span(icon("file-code"), texts$language_filter_label),
-            choices = languages,
-            selectize = TRUE
-          ),
-          selectInput(
-            "license_filter",
-            label = tags$span(icon("balance-scale"), texts$license_filter_label),
-            choices = licenses,
-            selectize = TRUE
-          )
-        ),
-        tags$div(
-          id = "filters",
-          style = "margin-top: 20px;",
+  
+  div(id="main_layout",
+      sidebarLayout(
+        sidebarPanel(
+          # Поле ввода пользователя
+          textInput("user_input", texts$user_input_label, placeholder = texts$user_input_placeholder),
           
-          # Группа для настроек логирования
+          # Контейнер для кнопок
           tags$div(
-            class = "filter-group",
-            style = "border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px;",
-            tags$h4(icon("database"), " Настройки логирования", style = "margin-top: 0;"),
+            class = "button-container",
+            actionButton("submit_button", icon = icon("search"), texts$submit_button, class = "submit-button", style = "background-color: #0366d6; color: white;"),
+            actionButton("toggle_filters", icon = icon("filter"), texts$toggle_filters_button, class = "toggle-button", style = "background-color: #28a745; color: white;")
+          ),
+          
+          # Контейнер для фильтров
+          tags$div(
+            id = "filters",
+            style = "margin-top: 20px;",
             
-            selectInput(
-              "log_level",
-              label = tags$span(icon("signal"), "Уровень логирования:"),
-              choices = c("TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"),
-              selected = "INFO",
-              selectize = FALSE
+            # Группа фильтров по датам
+            tags$div(
+              class = "filter-group",
+              style = "border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px;",
+              tags$h4(icon("calendar"), " Фильтры по датам", style = "margin-top: 0;"),
+              
+              dateRangeInput(
+                "created_date_range",
+                label = tags$span(icon("plus-circle"), texts$created_date_label),
+                start = "2008-04-10", # Дата начала работы GitHub
+                end = Sys.Date() + 1,
+                format = "dd.mm.yyyy",
+                language = "ru"
+              ),
+              dateRangeInput(
+                "updated_date_range",
+                label = tags$span(icon("sync"), texts$updated_date_label),
+                start = Sys.Date() - 365,
+                end = Sys.Date() + 1,
+                format = "dd.mm.yyyy",
+                language = "ru"
+              )
+            ),
+            
+            # Группа фильтров по языкам и лицензиям
+            tags$div(
+              class = "filter-group",
+              style = "border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px;",
+              tags$h4(icon("code"), " Фильтры по языкам и лицензиям", style = "margin-top: 0;"),
+              
+              selectInput(
+                "language_filter",
+                label = tags$span(icon("file-code"), texts$language_filter_label),
+                choices = languages,
+                selectize = TRUE
+              ),
+              selectInput(
+                "license_filter",
+                label = tags$span(icon("balance-scale"), texts$license_filter_label),
+                choices = licenses,
+                selectize = TRUE
+              )
+            ),
+            tags$div(
+              id = "filters",
+              style = "margin-top: 20px;",
+              
+              # Группа для настроек логирования
+              tags$div(
+                class = "filter-group",
+                style = "border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px;",
+                tags$h4(icon("database"), " Настройки логирования", style = "margin-top: 0;"),
+                
+                selectInput(
+                  "log_level",
+                  label = tags$span(icon("signal"), "Уровень логирования:"),
+                  choices = c("TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"),
+                  selected = "INFO",
+                  selectize = FALSE
+                )
+              )
+            ),
+            # Группа фильтров по метрикам
+            tags$div(
+              class = "filter-group",
+              style = "border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px;",
+              tags$h4(icon("chart-bar"), " Фильтры по метрикам", style = "margin-top: 0;"),
+              
+              sliderInput(
+                "stars_filter",
+                label = tags$span(icon("star"), texts$stars_filter_label),
+                min = 0,
+                max = 100,
+                value = c(0, 100)
+              ),
+              sliderInput(
+                "issues_filter",
+                label = tags$span(icon("exclamation-circle"), texts$issues_filter_label),
+                min = 0,
+                max = 10,
+                value = c(0, 10)
+              ),
+              sliderInput(
+                "contributors_filter",
+                label = tags$span(icon("users"), texts$contributors_filter_label),
+                min = 0,
+                max = 10,
+                value = c(0, 10)
+              ),
+              sliderInput(
+                "size_filter",
+                label = tags$span(icon("weight"), texts$size_filter_label),
+                min = 0,
+                max = 1000,
+                value = c(0, 1000)
+              )
             )
           )
-          ),
-        # Группа фильтров по метрикам
-        tags$div(
-          class = "filter-group",
-          style = "border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px;",
-          tags$h4(icon("chart-bar"), " Фильтры по метрикам", style = "margin-top: 0;"),
-
-          sliderInput(
-            "stars_filter",
-            label = tags$span(icon("star"), texts$stars_filter_label),
-            min = 0,
-            max = 100,
-            value = c(0, 100)
-          ),
-          sliderInput(
-            "issues_filter",
-            label = tags$span(icon("exclamation-circle"), texts$issues_filter_label),
-            min = 0,
-            max = 10,
-            value = c(0, 10)
-          ),
-          sliderInput(
-            "contributors_filter",
-            label = tags$span(icon("users"), texts$contributors_filter_label),
-            min = 0,
-            max = 10,
-            value = c(0, 10)
-          ),
-          sliderInput(
-            "size_filter",
-            label = tags$span(icon("weight"), texts$size_filter_label),
-            min = 0,
-            max = 1000,
-            value = c(0, 1000)
+        ),
+        
+        mainPanel(
+          tabsetPanel(
+            id = "mainTabs",
+            type = "tabs",
+            tabPanel("Главное",
+                     tags$div(
+                       style = "display: flex; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;",
+                       actionLink("tab_report", "Отчет", icon = icon("user"),
+                                  style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
+                       actionLink("tab_commits", "Коммиты", icon = icon("code"),
+                                  style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
+                       actionLink("tab_events", "События", icon = icon("chart-line"),
+                                  style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
+                       actionLink("tab_languages", "Языки", icon = icon("language"),
+                                  style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
+                       actionLink("tab_activity", "Активность", icon = icon("calendar"),
+                                  style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
+                       actionLink("tab_pca", "МГК", icon = icon("project-diagram"),
+                                  style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;")
+                     ),
+                     
+                     uiOutput("main_content")
+            ),
+            tabPanel("Настройки",
+                     tags$div(
+                       style = "display: flex; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;",
+                       actionLink("tab_env_vars", "Переменные", icon = icon("cog"),
+                                  style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
+                       actionLink("tab_other_settings", "Другие настройки", icon = icon("sliders-h"),
+                                  style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;")
+                     ),
+                     
+                     uiOutput("settings_content")
+            )
           )
         )
       )
-    ),
-
-    mainPanel(
-      tabsetPanel(
-        id = "mainTabs",
-        type = "tabs",
-        tabPanel("Главное",
-                 tags$div(
-                   style = "display: flex; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;",
-                   actionLink("tab_report", "Отчет", icon = icon("user"),
-                              style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
-                   actionLink("tab_commits", "Коммиты", icon = icon("code"),
-                              style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
-                   actionLink("tab_events", "События", icon = icon("chart-line"),
-                              style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
-                   actionLink("tab_languages", "Языки", icon = icon("language"),
-                              style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
-                   actionLink("tab_activity", "Активность", icon = icon("calendar"),
-                              style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
-                   actionLink("tab_pca", "МГК", icon = icon("project-diagram"),
-                              style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;")
-                 ),
-
-                 uiOutput("main_content")
-        ),
-        tabPanel("Настройки",
-                 tags$div(
-                   style = "display: flex; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;",
-                   actionLink("tab_env_vars", "Переменные", icon = icon("cog"),
-                              style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
-                   actionLink("tab_other_settings", "Другие настройки", icon = icon("sliders-h"),
-                              style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;")
-                 ),
-
-                 uiOutput("settings_content")
-        )
-      )
-    )
   )
 )
