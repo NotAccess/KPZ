@@ -231,7 +231,9 @@ ui <- fluidPage(
             tabPanel("Главное",
                      tags$div(
                        style = "display: flex; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;",
-                       actionLink("tab_report", "Отчет", icon = icon("user"),
+                       actionLink("tab_report", "О пользователе", icon = icon("user"),
+                                  style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
+                       actionLink("tab_repos", "Репозитории", icon = icon("folder"),
                                   style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
                        actionLink("tab_commits", "Коммиты", icon = icon("code"),
                                   style = "padding: 10px 15px; margin: 5px; border-radius: 4px; background: #fff; border: 1px solid #ddd;"),
