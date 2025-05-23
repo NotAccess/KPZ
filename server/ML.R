@@ -4,7 +4,7 @@ library(fastDummies)
 library(ggplot2)
 library(plotly)
 library(tools)
-library(httr)
+library(httr2)
 library(yaml)
 
 perform_pca <- function(commits, scale = TRUE) {
@@ -23,8 +23,8 @@ perform_pca <- function(commits, scale = TRUE) {
   # Загрузка актуальной версии languages.yml с GitHub
   load_languages_data <- function() {
     url <- "https://raw.githubusercontent.com/github-linguist/linguist/main/lib/linguist/languages.yml"
-    response <- GET(url)
-    yaml_text <- content(response, "text", encoding = "UTF-8")
+    response <- request(url) %>%  req_perform()
+    yaml_text <- response %>% resp_body_string(encoding = "UTF-8")
     languages <- yaml.load(yaml_text)
     
     # Создаем таблицы соответствий

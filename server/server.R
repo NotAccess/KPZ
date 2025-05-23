@@ -1,6 +1,6 @@
 library(shiny)
 library(shinyjs)
-library(httr)
+library(httr2)
 library(dplyr)
 library(DT)
 library(ggplot2)
@@ -218,8 +218,8 @@ server <- function(input, output, session) {
           )
         )
         
-        if (status_code(response) == 200) {
-          limits <- content(response)
+        if (resp_status(response) == 200) {
+          limits <- resp_body_json(response)
           core_limit <- limits$resources$core
           remaining <- core_limit$remaining
           limit <- core_limit$limit
@@ -1138,22 +1138,23 @@ server <- function(input, output, session) {
     
     while (attempt <= max_attempts) {
       tryCatch({
-        response <- POST(
-          url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
-          add_headers(
+        req <- request("https://llm.api.cloud.yandex.net/foundationModels/v1/completion") %>%
+          req_headers(
             "Content-Type" = "application/json",
             "Authorization" = paste("Api-Key", YANDEX_API_KEY)
-          ),
-          body = toJSON(prompt, auto_unbox = TRUE, pretty = TRUE),
-          encode = "json"
-        )
+          ) %>%
+          req_body_json(prompt)
         
-        if (status_code(response) != 200) {
-          return(paste("ERROR:", status_code(response)))
+        response <- req %>% 
+          req_error(is_error = \(resp) FALSE) %>% 
+          req_perform()
+        
+        # Парсинг ответа
+        if (resp_status(response) != 200) {
+          return(paste("ERROR:", resp_status(response)))
         }
         
-        # Парсинг и валидация JSON
-        response_content <- content(response, "text", encoding = "UTF-8")
+        response_content <- resp_body_string(response)
         if (!jsonlite::validate(response_content)) {
           stop("Invalid JSON response")
         }

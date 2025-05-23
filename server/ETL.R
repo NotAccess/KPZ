@@ -1,4 +1,4 @@
-library(httr)
+library(httr2)
 library(dplyr)
 library(purrr)
 library(duckdb)
@@ -8,47 +8,52 @@ library(lubridate)
 GITHUB_TOKEN <- Sys.getenv('GITHUB_TOKEN')
 
 github_api_get <- function(url) {
-  # обработка запросов по URL к GitHub API
+  req <- request(url) %>%
+    req_user_agent("ShinyApp") %>%
+    req_error(is_error = \(resp) FALSE)
+  
   if (nzchar(GITHUB_TOKEN)) {
-    response <- GET(url, add_headers(Authorization = paste("token", GITHUB_TOKEN)))
-  } else {
-    flog.warn("[WARN] No token provided")
-    response <- GET(url)
+    req <- req %>% 
+      req_headers(Authorization = paste("token", GITHUB_TOKEN))
   }
-
-  if (status_code(response) == 204) {
-    flog.warn("[INFO] Репозиторий не содержит данных (204 No Content).")
+  
+  response <- req %>% req_perform()
+  status <- resp_status(response)
+  
+  # Обработка статусов
+  if (status == 204) {
+    flog.warn("[INFO] Репозиторий пуст (204 No Content)")
     return(NULL)
   }
 
-  if (status_code(response) == 401) {
-    flog.error("[ERROR] Ошибка авторизации (проверьте токен): %s",status_code(response))
-    stop(paste("Ошибка авторизации (проверьте токен):", status_code(response)))
+  if (status == 401) {
+    flog.error("[ERROR] Ошибка авторизации (проверьте токен): %s",status)
+    stop(paste("Ошибка авторизации (проверьте токен):", status))
   }
 
-  if (status_code(response) == 403) {
-    flog.error("[ERROR] Лимит запросов исчерпан): %s",status_code(response))
+  if (status == 403) {
+    flog.error("[ERROR] Лимит запросов исчерпан): %s",status)
     stop("Лимит запросов исчерпан. Пожалуйста, обновите GitHub токен.")
   }
 
-  if (status_code(response) == 404) {
-    flog.warn("[WARN] Пользователь GitHub с данным именем не найден: %s",status_code(response))
+  if (status == 404) {
+    flog.warn("[WARN] Пользователь GitHub с данным именем не найден: %s",status)
     return(NULL)
   }
 
-  if (status_code(response) == 409) {
-    flog.warn("[WARN] Репозиторий пустой или конфликт (409 Conflict): %s",status_code(response))
+  if (status == 409) {
+    flog.warn("[WARN] Репозиторий пустой или конфликт (409 Conflict): %s",status)
     return(NULL)
   }
 
-  if (status_code(response) >= 500 && status_code(response) < 600) {
-    flog.warn("[WARN] Ошибка сервера: %s",status_code(response))
+  if (status >= 500 && status < 600) {
+    flog.warn("[WARN] Ошибка сервера: %s",status)
     return(NULL)
   }
 
-  if (status_code(response) != 200) {
-    flog.error("Ошибка при запросе к GitHub API: %s", status_code(response))
-    stop(paste("Ошибка при запросе к GitHub API:", status_code(response)))
+  if (status != 200) {
+    flog.error("Ошибка при запросе к GitHub API: %s", status)
+    stop(paste("Ошибка при запросе к GitHub API:", status))
   }
 
   return(response)
@@ -66,12 +71,12 @@ get_user_repos <- function(username, setProgress) {
   repeat {
     response <- github_api_get(url)
     if (is.null(response)) break
-
-    current_repos <- content(response, "parsed")
+    
+    current_repos <- response %>% resp_body_json()
     repos <- c(repos, current_repos)
 
     if (current_page == 1) {
-      link_header <- headers(response)$link
+      link_header <- resp_headers(response)$link
       if (!is.null(link_header) && grepl('rel="last"', link_header)) {
         total_pages <- regexpr('<https://[^>]+>; rel="last"', link_header) %>%
           regmatches(link_header, .) %>%
@@ -83,7 +88,7 @@ get_user_repos <- function(username, setProgress) {
 
     setProgress(detail = sprintf("%d", length(repos)))
 
-    link_header <- headers(response)$link
+    link_header <- resp_headers(response)$link
     if (is.null(link_header) || !grepl('rel="next"', link_header)) break
     
     url <- regexpr('<https://[^>]+>; rel="next"', link_header) %>%
@@ -114,7 +119,7 @@ get_user_repos <- function(username, setProgress) {
     )
 
     contributors_response <- github_api_get(paste0("https://api.github.com/repos/", repo$full_name, "/contributors"))
-    contributors_count <- if (!is.null(contributors_response)) length(content(contributors_response, "parsed")) else 0
+    contributors_count <- if (!is.null(contributors_response)) length(resp_body_json(contributors_response)) else 0
 
     list(
       username = username,
@@ -187,7 +192,7 @@ get_user_commits_df <- function(repos, setProgress = NULL,
       
       branches_response <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/branches?per_page=100"))
       if (is.null(branches_response)) next
-      branches <- content(branches_response, "parsed")
+      branches <- resp_body_json(branches_response)
       flog.debug("[BRANCHES] Found %d branches in %s", length(branches), repo_name)
       
       for (branch in branches) {
@@ -201,7 +206,7 @@ get_user_commits_df <- function(repos, setProgress = NULL,
             flog.error("[API_ERROR] Failed to get commits for %s/%s", repo_name, branch_name)
             break
             }
-          commits <- content(response, "parsed")
+          commits <- resp_body_json(response)
           if (length(commits) == 0) {
             flog.debug("[NO_COMMITS] No commits in branch %s", branch_name)
             break
@@ -222,7 +227,7 @@ get_user_commits_df <- function(repos, setProgress = NULL,
           
           
           # Pagination
-          link_header <- headers(response)$link
+          link_header <- resp_headers(response)$link
           if (is.null(link_header) || !grepl('rel="next"', link_header)) break
           url <- regmatches(link_header, regexpr('<https://[^>]+>; rel="next"', link_header)) |> 
             gsub('<|>; rel="next"', '', x = _)
@@ -280,8 +285,9 @@ get_user_commits_df <- function(repos, setProgress = NULL,
       # Process new commit
       
       commit_details <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/commits/", commit_sha))
-      if (is.null(commit_details)) next
-      commit_data <- content(commit_details, "parsed")
+      if (!is.null(commit_details)) {
+        commit_data <- commit_details %>% resp_body_json()
+      }
       
       if (!is.null(commit_data$files) && length(commit_data$files) > 0) {
         file_data <- lapply(commit_data$files, function(file) {
@@ -346,7 +352,7 @@ get_user_profile <- function(username) {
   response <- github_api_get(paste0("https://api.github.com/users/", username))
   if (is.null(response)) return(NULL)
 
-  profile <- content(response, "parsed")
+  profile <- resp_body_json(response)
 
   list(
     name = profile$login,
