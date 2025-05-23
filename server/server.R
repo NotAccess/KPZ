@@ -647,14 +647,103 @@ server <- function(input, output, session) {
   })
   
   output$language_plot <- renderPlotly({
+    
     if (!is.null(data$language_data)) {
-      ggplotly(
-        ggplot(data$language_data, aes(x = language, y = count, fill = language)) +
-          geom_bar(stat = "identity") +
-          labs(title = "Популярность языков программирования", x = "Язык", y = "Количество репозиториев")
-      )
+      
+      lang_data <- data$language_data %>%
+        mutate(
+          percentage = round(count / sum(count) * 100, 2),
+          
+          color = sapply(language, function(lang) {
+            set.seed(nchar(lang))
+            
+            paste0("#", substr(digest::digest(lang, algo = "xxhash32"), 1, 6))
+          })
+        ) %>%
+        arrange(desc(count))
+      
+      
+      annotations <- lapply(1:nrow(lang_data), function(i) {
+        list(
+          x = 1.15,
+          
+          y = 1 - (i * 0.05),
+          
+          text = paste0(
+            "<span style='color:", lang_data$color[i], "'>■ </span>",
+            
+            lang_data$language[i], 
+            
+            " (", sprintf("%.2f%%", lang_data$percentage[i]), ")"
+          ),
+          
+          showarrow = FALSE,
+          
+          xref = "paper",
+          
+          yref = "paper",
+          
+          font = list(size = 12),
+          
+          align = "left"
+        )
+      })
+      
+      
+      plot_ly(
+        data = lang_data,
+        
+        labels = ~language,
+        
+        values = ~count,
+        
+        marker = list(
+          colors = ~color,
+          
+          line = list(color = "#FFFFFF", width = 1)
+        ),
+        
+        textinfo = "none",
+        
+        hoverinfo = "label+percent+value",
+        
+        type = "pie",
+        
+        hole = 0,
+        
+        sort = FALSE
+      ) %>% 
+        layout(
+          showlegend = FALSE,
+          
+          margin = list(t = 40, b = 20, r = 200),
+          
+          annotations = c(
+            list(
+              list(
+                x = 1.05,
+                
+                y = 1.05,
+                
+                text = "Языки программирования:",
+                
+                showarrow = FALSE,
+                
+                xref = "paper",
+                
+                yref = "paper",
+                
+                font = list(size = 14, weight = "bold")
+              )
+            ),
+            
+            annotations
+          )
+        )
     }
   })
+  
+  
   
   output$commit_heatmap <- renderPlotly({
     if (!is.null(data$commit_heatmap_data)) {
