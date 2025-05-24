@@ -12,28 +12,27 @@ perform_pca <- function(commits, scale = TRUE) {
   if (is.null(commits)) {
     flog.debug("[PCA] commits for PCA = Null")
     stop("Ошибка: commits равен NULL")
-      
   }
-  
+
   META_COLUMNS <- c("id", "author")
   DUMMY_COLUMNS <- c("repo", "author_copy", "status", "file_extension", "branch",
                      "year", "month", "day", "hour", "minute", "second", "time_of_day",
                      "weekday", "quarter", "file_type")
-  
+
   # Загрузка актуальной версии languages.yml с GitHub
   load_languages_data <- function() {
     url <- "https://raw.githubusercontent.com/github-linguist/linguist/main/lib/linguist/languages.yml"
     response <- request(url) %>%  req_perform()
     yaml_text <- response %>% resp_body_string(encoding = "UTF-8")
     languages <- yaml.load(yaml_text)
-    
+
     # Создаем таблицы соответствий
     ext_to_type <- list()
     filename_to_type <- list()
-    
+
     for (lang in names(languages)) {
       type <- languages[[lang]]$type %||% "unknown"
-      
+
       # Обрабатываем расширения
       if (!is.null(languages[[lang]]$extensions)) {
         exts <- tolower(sub("^\\.", "", languages[[lang]]$extensions))
@@ -41,7 +40,7 @@ perform_pca <- function(commits, scale = TRUE) {
           ext_to_type[[ext]] <- type
         }
       }
-      
+
       # Обрабатываем filenames
       if (!is.null(languages[[lang]]$filenames)) {
         fnames <- tolower(languages[[lang]]$filenames)
@@ -50,12 +49,12 @@ perform_pca <- function(commits, scale = TRUE) {
         }
       }
     }
-    
+
     list(extensions = ext_to_type, filenames = filename_to_type)
   }
-  
+
   lang_data <- load_languages_data()
-  
+
   # Предобработка данных
   preprocess_data <- function(data) {
     flog.trace("[PCA] PCA preprocess starts")
@@ -64,20 +63,20 @@ perform_pca <- function(commits, scale = TRUE) {
       # Нормализация имени файла
       base_name <- tolower(basename(filename))
       ext <- tolower(tools::file_ext(filename))
-      
+
       # Проверка по filenames
       if (base_name %in% names(lang_data$filenames)) {
         return(lang_data$filenames[[base_name]])
       }
-      
+
       # Проверка по расширению
       if (nzchar(ext) && ext %in% names(lang_data$extensions)) {
         return(lang_data$extensions[[ext]])
       }
-      
+
       return("other")
     }
-    
+
     data %>%
       mutate(
         date_struct = as.POSIXct(date, format = "%Y.%m.%d %H:%M:%S"),
@@ -95,7 +94,7 @@ perform_pca <- function(commits, scale = TRUE) {
         ),
         weekday = wday(date_struct, label = TRUE, abbr = FALSE),
         quarter = quarter(date_struct),
-        
+
         file_extension = file_ext(filename),
         author_copy = author,
         len_message = nchar(message),
@@ -119,7 +118,7 @@ perform_pca <- function(commits, scale = TRUE) {
         commits_unique <- select(., id, repo, author, date_struct) %>%
           distinct(id, .keep_all = TRUE) %>%
           arrange(date_struct)
-        
+
         # Время с последнего коммита в репозитории
         repo_times <- commits_unique %>%
           group_by(repo) %>%
@@ -128,7 +127,7 @@ perform_pca <- function(commits, scale = TRUE) {
           ungroup() %>%
           select(id, time_since_last_repo) %>%
           mutate(time_since_last_repo = ifelse(is.na(time_since_last_repo), -1, time_since_last_repo))
-        
+
         # Время с последнего коммита автора
         author_times <- commits_unique %>%
           group_by(author) %>%
@@ -137,7 +136,7 @@ perform_pca <- function(commits, scale = TRUE) {
           ungroup() %>%
           select(id, time_since_last_author) %>%
           mutate(time_since_last_author = ifelse(is.na(time_since_last_author), -1, time_since_last_author))
-        
+
         # Совмещаем с исходными данными
         left_join(., repo_times, by = "id") %>%
           left_join(author_times, by = "id") %>%
@@ -152,13 +151,13 @@ perform_pca <- function(commits, scale = TRUE) {
         ignore_na = TRUE
       )
   }
-  
-  
+
+
   # Агрегация данных
   aggregate_data <- function(data) {
     flog.trace("[PCA] PCA aggreagation starts")
     dummy_features <- paste0(DUMMY_COLUMNS, "_")
-    
+
     data %>%
       group_by(across(all_of(META_COLUMNS))) %>%
       summarise(
@@ -177,26 +176,26 @@ perform_pca <- function(commits, scale = TRUE) {
         .groups = "drop"
       )
   }
-  
+
   # Основной пайплайн обработки
   processed_data <- commits %>%
     preprocess_data() %>%
     aggregate_data()
-  
+
   # Выделение числовых данных
   numeric_data <- processed_data %>%
     select(-all_of(META_COLUMNS)) %>%
     select(where(is.numeric)) %>%
     select(where(~ sd(.x, na.rm = TRUE) > 0)) # Выбираем столбцы с ненулевой дисперсией
-  
+
   if (ncol(numeric_data) < 2) {
     stop("Ошибка: недостаточно числовых столбцов для PCA")
   }
-  
+
   flog.trace("[PCA] PCA compute begins")
   # Вычисление PCA
   pca_result <- prcomp(numeric_data, center = TRUE, scale. = scale)
-  
+
   # Формирование итоговых данных
   pca_data <- bind_cols(
     processed_data[META_COLUMNS],
@@ -204,18 +203,18 @@ perform_pca <- function(commits, scale = TRUE) {
     as_tibble(pca_result$x),
     distance = sqrt(rowSums(pca_result$x^2))
   )
-  
+
   return(pca_data)
 }
 
 detect_outliers <- function(pca_data, threshold = 2) {
   # Определение аномалий (threshold - порог выброса)
   z_scores <- scale(pca_data$distance)
-  
+
   outliers <- pca_data %>%
     mutate(z_score = as.numeric(z_scores)) %>%
     filter(abs(z_scores) >= threshold) %>%
     select(id, author, distance, z_score, patches)
-  
+
   return(outliers)
 }

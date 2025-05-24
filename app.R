@@ -1,7 +1,6 @@
 library(shiny)
 library(futile.logger)
 
-
 source("ui/ui.R")
 source("server/server.R")
 
