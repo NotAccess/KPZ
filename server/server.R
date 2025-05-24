@@ -508,8 +508,14 @@ server <- function(input, output, session) {
                 href = repo$url,
                 target = "_blank",
                 class = "btn btn-primary",
-                style = "margin: 0; font-size: 24px; color: #FFFFFF;",
-                tags$i(class = "fas fa-book", style = "font-size: 24px; margin-right: 8px; color: #FFFFFF;"),
+                style = paste(
+                  "margin: 0;",
+                  "font-size: 24px;",
+                  "color: #0366d6 !important;", # Синий цвет текста
+                  "background-color: #f9f9f9 !important;", # Белый фон
+                  "border: 1px solid #f9f9f9 !important;" # Белая рамка
+                ),
+                tags$i(class = "fas fa-book", style = "margin-right: 8px;"),
                 repo$name
               ),
               if (repo$is_fork) {
@@ -584,17 +590,27 @@ server <- function(input, output, session) {
 
               # Открытые Issues
               tags$div(
-                style = "margin-bottom: 8px;",
+                style = "background: #fff; padding: 8px; border-radius: 4px;",
                 tags$p(
                   style = "margin: 0; font-size: 14px; color: #586069;",
                   tags$i(class = "fas fa-exclamation-circle", style = "margin-right: 8px; color: #d73a49;"),
                   "Открытые issues: ", tags$b(repo$open_issues)
                 )
               ),
-
+              
+              # Векти
+              tags$div(
+                style = "background: #fff; padding: 8px; border-radius: 4px;",
+                tags$p(
+                  style = "margin: 0; font-size: 14px; color: #586069;",
+                  tags$i(class = "fas fa-network-wired", style = "margin-right: 8px; color: #6f42c1;"),
+                  "Ветки: ", tags$b(repo$branches)
+                )
+              ),
+              
               # Размер репозитория
               tags$div(
-                style = "margin-bottom: 8px;",
+                style = "background: #fff; padding: 8px; border-radius: 4px;",
                 tags$p(
                   style = "margin: 0; font-size: 14px; color: #586069;",
                   tags$i(class = "fas fa-weight", style = "margin-right: 8px; color: #6a737d;"),

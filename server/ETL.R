@@ -445,15 +445,15 @@ prepare_commit_heatmap_data <- function(commits) {
       day_number = as.POSIXlt(date)$wday, # 0-6 (воскресенье = 0)
       day = factor(
         case_when(
-          day_number == 0 ~ "Вс",
-          day_number == 1 ~ "Пн",
-          day_number == 2 ~ "Вт",
-          day_number == 3 ~ "Ср",
-          day_number == 4 ~ "Чт",
-          day_number == 5 ~ "Пт",
-          day_number == 6 ~ "Сб"
+          day_number == 0 ~ "Воскресенье",
+          day_number == 1 ~ "Понедельник",
+          day_number == 2 ~ "Вторник",
+          day_number == 3 ~ "Среда",
+          day_number == 4 ~ "Четверг",
+          day_number == 5 ~ "Пятница",
+          day_number == 6 ~ "Суббота"
         ),
-        levels = c("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"),
+        levels = c("Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"),
         ordered = TRUE
       )
     ) %>%
