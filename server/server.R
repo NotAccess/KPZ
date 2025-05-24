@@ -10,12 +10,15 @@ library(jsonlite)
 library(markdown)
 library(readr)
 
+# Загрузка вспомогательных скриптов
 source("server/ETL.R")
 source("server/ML.R")
 
+# Получение переменных окружения для Yandex API
 YANDEX_FOLDER_ID <- Sys.getenv('YANDEX_FOLDER_ID')
 YANDEX_API_KEY <- Sys.getenv('YANDEX_API_KEY')
 
+# Функция для фильтрации репозиториев по заданным критериям
 filter_repos <- function(repos, filters) {
   keep(repos, ~ {
     repo <- .
@@ -32,24 +35,26 @@ filter_repos <- function(repos, filters) {
   })
 }
 
+# Основная функция сервера Shiny
 server <- function(input, output, session) {
   needs_restart <- FALSE
   sidebar_state <- reactiveVal(FALSE)
-  
-  # Обработчик клика по кнопке
+
+  # Обработчик клика по кнопке сворачивания/разворачивания боковой панели
   observeEvent(input$toggle_sidebar, {
     sidebar_state(!sidebar_state())
     shinyjs::toggleClass("main_layout", "sidebar-collapsed")
-    
-    # Меняем иконку кнопки
+
+    # Обновление иконки кнопки
     icon_name <- if (sidebar_state()) "angle-double-right" else "angle-double-left"
     updateActionButton(session, "toggle_sidebar", icon = icon(icon_name))
   })
-  # Проверка и инициализация .Renviron
+
+  # Функция для инициализации файла .Renviron
   init_renviron <- function() {
     renv_path <- file.path(getwd(), ".Renviron")
-    
-    # Если файла нет - создаем с дефолтными значениями
+
+    # Создание файла с дефолтными значениями, если он не существует
     if (!file.exists(renv_path)) {
       writeLines(
         c(
@@ -65,12 +70,14 @@ server <- function(input, output, session) {
     } else {
       # Если файл есть - проверяем наличие обязательных переменных
       renv_lines <- readLines(renv_path)
-      
+
       # Функция для проверки и добавления переменной
       check_add_var <- function(var_name, default_value) {
         pattern <- paste0("^", var_name, "=")
         if (!any(grepl(pattern, renv_lines))) {
-          write(paste0(var_name, "=", default_value), renv_path, append = TRUE)
+          write(paste0(var_name, "=", default_value),
+                renv_path,
+                append = TRUE)
           message("Added missing variable: ", var_name)
         } else {
           # Проверяем что после = есть значение
@@ -83,29 +90,29 @@ server <- function(input, output, session) {
           }
         }
       }
-      
+
       # Проверяем обязательные переменные
       check_add_var("DUCK_DB", "KPZ")
       check_add_var("COMMITS_TABLE", "commits")
     }
-    
+
     # Загружаем обновленный .Renviron
     readRenviron(renv_path)
   }
-  
+
   # Инициализируем .Renviron перед запуском приложения
   init_renviron()
-  
+
   # Обработка текущего уровня логгирования
   observeEvent(input$log_level, {
     new_level <- input$log_level
     flog.threshold(new_level)
   })
-  
+
   # Реактивные значения для текущих вкладок
   current_main_tab <- reactiveVal("report")
   current_settings_tab <- reactiveVal("env_vars")
-  
+
   # Обработчики переключения вкладок Главного меню
   observeEvent(input$tab_report, { current_main_tab("report") })
   observeEvent(input$tab_repos, { current_main_tab("repos") })
@@ -114,11 +121,11 @@ server <- function(input, output, session) {
   observeEvent(input$tab_languages, { current_main_tab("languages") })
   observeEvent(input$tab_activity, { current_main_tab("activity") })
   observeEvent(input$tab_pca, { current_main_tab("pca") })
-  
+
   # Обработчики переключения вкладок Настроек
   observeEvent(input$tab_env_vars, { current_settings_tab("env_vars") })
   observeEvent(input$tab_other_settings, { current_settings_tab("other_settings") })
-  
+
   # Рендеринг контента для Главного меню
   output$main_content <- renderUI({
     switch(current_main_tab(),
@@ -150,7 +157,7 @@ server <- function(input, output, session) {
            )
     )
   })
-  
+
   # Рендеринг контента для Настроек
   output$settings_content <- renderUI({
     switch(current_settings_tab(),
@@ -178,7 +185,7 @@ server <- function(input, output, session) {
            )
     )
   })
-  
+
   # Обработчик сохранения переменных окружения
   observeEvent(input$save_env, {
     env_vars <- c(
@@ -188,14 +195,14 @@ server <- function(input, output, session) {
       paste0("DUCK_DB=", input$duck_db),
       paste0("COMMITS_TABLE=", input$commits_table)
     )
-    
+
     tryCatch({
       writeLines(env_vars, ".Renviron")
       readRenviron(".Renviron")
-      
+
       # Вместо немедленной перезагрузки устанавливаем флаг
       needs_restart <<- TRUE
-      
+
       output$env_status <- renderText({
         "Настройки успешно сохранены! Перезагрузка произойдет при закрытии приложения."
       })
@@ -205,8 +212,8 @@ server <- function(input, output, session) {
       })
     })
   })
-  
-  # Проверка лимита запросов
+
+  # Проверка лимита запросов GitHub API
   update_github_rate_limit <- function() {
     token <- Sys.getenv("GITHUB_TOKEN")
     if (nzchar(token)) {
@@ -216,19 +223,19 @@ server <- function(input, output, session) {
             Accept = "application/vnd.github+json",
             Authorization = paste("Bearer", token)
           )
-        
+
         resp <- req %>% req_perform()
-        
+
         if (resp_is_error(resp)) {
           stop("Request failed")
         }
-        
+
         limits <- resp %>% resp_body_json()
         core_limit <- limits$resources$core
         remaining <- core_limit$remaining
         limit <- core_limit$limit
         reset_time <- as.POSIXct(core_limit$reset, origin = "1970-01-01")
-        
+
         output$github_rate_limit <- renderUI({
           tags$div(
             class = "rate-limit-box",
@@ -263,18 +270,20 @@ server <- function(input, output, session) {
       })
     }
   }
-  
-  hide("filters")
-  
+
+  hide("filters") # Скрытие фильтров по умолчанию
+
+  # Реактивные значения для хранения данных
   data <- reactiveValues(
-    repos = NULL,
-    user_profile = NULL,
-    commits = NULL,
-    activity_data = NULL,
-    language_data = NULL,
-    commit_heatmap_data = NULL
+    repos = NULL, # Репозитории пользователя
+    user_profile = NULL, # Профиль пользователя
+    commits = NULL, # Коммиты
+    activity_data = NULL, # Данные активности
+    language_data = NULL, # Данные по языкам
+    commit_heatmap_data = NULL # Данные для тепловой карты коммитов
   )
-  
+
+  # Обработчик переключения видимости фильтров
   observeEvent(input$toggle_filters, {
     toggle("filters")
     if (input$toggle_filters %% 2 == 1) {
@@ -283,7 +292,8 @@ server <- function(input, output, session) {
       updateActionButton(session, "toggle_filters", label = "Показать фильтры", icon = icon("eye"))
     }
   })
-  
+
+  # Реактивное значение для фильтров
   filters <- reactive({
     list(
       language = input$language_filter,
@@ -296,46 +306,52 @@ server <- function(input, output, session) {
       license = input$license_filter
     )
   })
-  
+
+  # Обработчик нажатия кнопки "Анализировать"
   observeEvent(input$submit_button, {
     user_text <- input$user_input
-    
+
     data$user_profile <- NULL
     data$commits <- NULL
     data$activity_data <- NULL
     data$language_data <- NULL
     data$commit_heatmap_data <- NULL
-    
+
     withProgress(message = "", value = 0, {
+      # Получение репозиториев пользователя с фильтрацией
       data$repos <- get_user_repos(user_text, setProgress) %>%
         filter_repos(filters())
-      
+
       if (!is.null(data$repos)) {
+        # Получение профиля пользователя и подготовка данных
         data$user_profile <- get_user_profile(user_text)
         data$activity_data <- prepare_activity_data(data$repos)
         data$language_data <- prepare_language_data(data$repos)
-      } else {
+      }
+      else {
         showNotification("Ошибка при загрузке репозиториев", type = "error")
       }
     })
   })
-  
-  # Вызов при загрузке
+
+  # Обработчик загрузки данных при изменении репозиториев
   observe({
     if (!is.null(data$repos)) {
       withProgress(message = "", value = 0, {
+        # Получение коммитов пользователя
         commits <- get_user_commits_df(data$repos, setProgress)
         if (!is.null(commits)) {
           data$commits <- commits %>% arrange(desc(date))
           data$commit_heatmap_data <- prepare_commit_heatmap_data(data$commits)
-        } else {
+        }
+        else {
           showNotification("Коммиты не найдены", type = "warning")
         }
       })
     }
-    update_github_rate_limit()
+    update_github_rate_limit() # Обновление информации о лимите запросов
   })
-  
+
   # Рендеринг контента для Отчета
   output$user_report <- renderUI({
     profile <- data$user_profile
@@ -343,16 +359,17 @@ server <- function(input, output, session) {
       tags$div(
         class = "user-report",
         style = "padding: 20px;",
-        
+
+        # Заголовок профиля с аватаркой
         tags$div(
           class = "profile-header",
           style = "display: flex; align-items: center; margin-bottom: 30px;",
-          
+
           tags$img(
             src = profile$avatar_url,
             style = "width: 150px; height: 150px; border-radius: 50%; margin-right: 30px;"
           ),
-          
+
           tags$div(
             tags$h1(profile$name, style = "margin: 0 0 10px 0;"),
             tags$p(profile$bio, style = "font-size: 16px; color: #666;"),
@@ -373,44 +390,46 @@ server <- function(input, output, session) {
               )
             )
           )
-          
-          
+
+
         ),
-        
+
+        # Сетка статистики
         tags$div(
           class = "stats-grid",
           style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;",
-          
-          # Левая колонка
+
+          # Левая колонка - основная информация
           tags$div(
             class = "stats-column",
             style = "background: #f8f9fa; padding: 20px; border-radius: 10px;",
-            
+
             tags$h3(icon("chart-line"), "Активность", style = "margin-top: 0;"),
             tags$p(icon("calendar"), "Создан: ", format(as.Date(profile$created_at), "%d.%m.%Y")),
             tags$p(icon("sync"), "Последняя активность: ", format(as.Date(profile$updated_at), "%d.%m.%Y")),
             tags$p(icon("building"), "Компания: ", profile$company %||% "Не указана"),
             tags$p(icon("map-marker"), "Локация: ", profile$location %||% "Не указана")
           ),
-          
-          # Правая колонка
+
+          # Правая колонка - статистика по репозиториям
           tags$div(
             class = "stats-column",
             style = "background: #f8f9fa; padding: 20px; border-radius: 10px;",
-            
+
             tags$h3(icon("trophy"), "Достижения", style = "margin-top: 0;"),
             tags$p(icon("star"), "Звёзд всего: ", sum(sapply(data$repos, function(r) r$stars))),
             tags$p(icon("star"), "Звёзд в среднем: ", round(mean(sapply(data$repos, function(r) r$stars)), 1)),
             tags$p(icon("code-branch"), "Форков всего: ", sum(sapply(data$repos, function(r) r$forks))),
             tags$p(icon("code-branch"), "Форков в среднем: ", round(mean(sapply(data$repos, function(r) r$forks)), 1)),
             tags$p(icon("exclamation-triangle"), "Репозиториев с лицензией: ", sum(sapply(data$repos, function(r) r$license != "Нет лицензии")))
-            
+
           )
         )
       )
     }
   })
-  
+
+  # Рендеринг таблицы коммитов
   output$commits_table <- renderDataTable({
     commits <- data$commits
     if (!is.null(commits)) {
@@ -418,20 +437,23 @@ server <- function(input, output, session) {
       commits$patch <- sapply(commits$patch, function(x) {
         if (nchar(x) > 50) {
           paste0(substr(x, 1, 50), "...")
-        } else {
+        }
+        else {
           x
         }
       })
-      
+
       # Ограничиваем длину текста в столбце filename
       commits$filename <- sapply(commits$filename, function(x) {
         if (nchar(x) > 200) {
           paste0(substr(x, 1, 200), "...")
-        } else {
+        }
+        else {
           x
         }
       })
-      
+
+      # Создание DataTable с настройками
       datatable(
         commits,
         options = list(
@@ -466,7 +488,8 @@ server <- function(input, output, session) {
       NULL
     }
   })
-  
+
+  # Рендеринг информации о репозиториях
   output$repo_info <- renderUI({
     repos <- data$repos
     if (!is.null(repos)) {
@@ -476,6 +499,7 @@ server <- function(input, output, session) {
           tags$div(
             class = "repo-card",
             style = "border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; background: #f9f9f9;",
+
             # Заголовок с иконкой
             tags$div(
               style = "display: flex; align-items: center; margin-bottom: 12px;",
@@ -504,7 +528,7 @@ server <- function(input, output, session) {
                 )
               }
             ),
-            
+
             # Описание
             if (!is.null(repo$description) && repo$description != "") {
               tags$p(
@@ -513,11 +537,11 @@ server <- function(input, output, session) {
                 repo$description
               )
             },
-            
+
             # Основные метрики
             tags$div(
               style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px;",
-              
+
               # Язык программирования
               tags$div(
                 style = "background: #fff; padding: 8px; border-radius: 4px;",
@@ -527,7 +551,7 @@ server <- function(input, output, session) {
                   "Язык: ", tags$b(repo$language)
                 )
               ),
-              
+
               # Звёзды
               tags$div(
                 style = "background: #fff; padding: 8px; border-radius: 4px;",
@@ -537,7 +561,7 @@ server <- function(input, output, session) {
                   "Звёзды: ", tags$b(repo$stars)
                 )
               ),
-              
+
               # Форки
               tags$div(
                 style = "background: #fff; padding: 8px; border-radius: 4px;",
@@ -547,7 +571,7 @@ server <- function(input, output, session) {
                   "Форки: ", tags$b(repo$forks)
                 )
               ),
-              
+
               # Участники
               tags$div(
                 style = "background: #fff; padding: 8px; border-radius: 4px;",
@@ -557,7 +581,7 @@ server <- function(input, output, session) {
                   "Участники: ", tags$b(repo$contributors)
                 )
               ),
-              
+
               # Открытые Issues
               tags$div(
                 style = "margin-bottom: 8px;",
@@ -567,7 +591,7 @@ server <- function(input, output, session) {
                   "Открытые issues: ", tags$b(repo$open_issues)
                 )
               ),
-              
+
               # Размер репозитория
               tags$div(
                 style = "margin-bottom: 8px;",
@@ -578,11 +602,11 @@ server <- function(input, output, session) {
                 )
               )
             ),
-            
+
             # Даты и ссылка
             tags$div(
               style = "display: flex; justify-content: space-between; align-items: center; margin-top: 12px;",
-              
+
               # Даты
               tags$div(
                 style = "font-size: 12px; color: #586069;",
@@ -603,7 +627,8 @@ server <- function(input, output, session) {
       )
     } else { }
   })
-  
+
+  # Рендеринг графика активности
   output$activity_plot <- renderPlotly({
     if (!is.null(data$activity_data)) {
       ggplotly(
@@ -613,107 +638,109 @@ server <- function(input, output, session) {
       )
     }
   })
-  
+
+  # Рендеринг графика языков программирования
   output$language_plot <- renderPlotly({
-    
+
     if (!is.null(data$language_data)) {
-      
+
       lang_data <- data$language_data %>%
         mutate(
           percentage = round(count / sum(count) * 100, 2),
-          
+
           color = sapply(language, function(lang) {
             set.seed(nchar(lang))
-            
+
             paste0("#", substr(digest::digest(lang, algo = "xxhash32"), 1, 6))
           })
         ) %>%
         arrange(desc(count))
-      
-      
+
+      # Создание аннотаций для легенды
       annotations <- lapply(1:nrow(lang_data), function(i) {
         list(
           x = 1.15,
-          
+
           y = 1 - (i * 0.05),
-          
+
           text = paste0(
             "<span style='color:", lang_data$color[i], "'>■ </span>",
-            
-            lang_data$language[i], 
-            
+
+            lang_data$language[i],
+
             " (", sprintf("%.2f%%", lang_data$percentage[i]), ")"
           ),
-          
+
           showarrow = FALSE,
-          
+
           xref = "paper",
-          
+
           yref = "paper",
-          
+
           font = list(size = 12),
-          
+
           align = "left"
         )
       })
-      
-      
+
+      # Создание круговой диаграммы
       plot_ly(
         data = lang_data,
-        
+
         labels = ~language,
-        
+
         values = ~count,
-        
+
         marker = list(
           colors = ~color,
-          
+
           line = list(color = "#FFFFFF", width = 1)
         ),
-        
+
         textinfo = "none",
-        
+
         hoverinfo = "label+percent+value",
-        
+
         type = "pie",
-        
+
         hole = 0,
-        
+
         sort = FALSE
-      ) %>% 
+      ) %>%
         layout(
           showlegend = FALSE,
-          
+
           margin = list(t = 40, b = 20, r = 200),
-          
+
           annotations = c(
             list(
               list(
                 x = 1.05,
-                
+
                 y = 1.05,
-                
+
                 text = "Языки программирования:",
-                
+
                 showarrow = FALSE,
-                
+
                 xref = "paper",
-                
+
                 yref = "paper",
-                
+
                 font = list(size = 14, weight = "bold")
               )
             ),
-            
+
             annotations
           )
         )
     }
   })
-  
+
+  # Рендеринг тепловой карты коммитов
   output$commit_heatmap <- renderPlotly({
     req(data$commit_heatmap_data)
-    
+
     # Рассчитываем общее количество коммитов по дням
     daily_stats <- data$commit_heatmap_data %>%
       group_by(day) %>%
@@ -727,7 +754,7 @@ server <- function(input, output, session) {
         peak_count = max(count),
         .groups = "drop"
       )
-    
+
     # Объединяем с основными данными
     heatmap_data <- data$commit_heatmap_data %>%
       left_join(daily_stats, by = "day") %>%
@@ -735,16 +762,16 @@ server <- function(input, output, session) {
         percent_of_day = ifelse(day_total > 0, round(100 * count / day_total, 1), 0),
         hour_label = sprintf("%02d:00-%02d:00", hour, hour+1)
       )
-    
+
     max_count <- max(heatmap_data$count)
-    
+
     plot_ly() %>%
       add_heatmap(
         data = heatmap_data,
-        x = ~hour, 
-        y = ~day, 
+        x = ~hour,
+        y = ~day,
         z = ~count,
-        colors = c("#f7fbff", "#deebf7", "#c6dbef", "#9ecae1", 
+        colors = c("#f7fbff", "#deebf7", "#c6dbef", "#9ecae1",
                    "#6baed6", "#4292c6", "#2171b5", "#08519c", "#08306b"),
         hoverinfo = "text",
         text = ~paste0(
@@ -796,11 +823,12 @@ server <- function(input, output, session) {
       ) %>%
       config(displayModeBar = FALSE)
   })
-  
+
+  # Рендеринг графика PCA
   output$pca_plot <- renderPlotly({
     if (!is.null(data$commits)) {
       pca_data <- perform_pca(data$commits)
-      
+
       plot_ly(
         data = pca_data,
         x = ~PC1,
@@ -816,11 +844,12 @@ server <- function(input, output, session) {
       ) %>% layout()
     }
   })
-  
+
+  # Рендеринг карточек аномальных коммитов
   output$outlier_cards <- renderUI({
     req(data$commits)
     outliers <- detect_outliers(perform_pca(data$commits))
-    
+
     if (!is.null(outliers) && nrow(outliers) > 0) {
       # Группируем коммиты по (ID, author)
       outlier_commits <- merge(outliers, data$commits, by = "id") %>%
@@ -839,11 +868,11 @@ server <- function(input, output, session) {
           .groups = "drop"
         ) %>%
         arrange(desc(z_score))
-      
+
       lapply(1:nrow(outlier_commits), function(i) {
         commit <- outlier_commits[i,]
         commit_url <- paste0("https://github.com/", commit$repo, "/commit/", commit$id)
-        
+
         # Определение цветов для z-score
         z_color <- case_when(
           commit$z_score >= 3 ~ list(
@@ -865,7 +894,7 @@ server <- function(input, output, session) {
             label = "✅ Норма"
           )
         )
-        
+
         tags$div(
           class = "commit-card",
           style = paste(
@@ -877,7 +906,7 @@ server <- function(input, output, session) {
             "box-shadow: 0 2px 6px rgba(0,0,0,0.08);",
             "position: relative;"
           ),
-          
+
           # Лента аномалии
           tags$div(
             style = paste(
@@ -892,7 +921,7 @@ server <- function(input, output, session) {
             ),
             icon("exclamation-triangle"), " Аномалия"
           ),
-          
+
           # Основной контент
           tags$div(
             # Заголовок
@@ -934,11 +963,11 @@ server <- function(input, output, session) {
                 )
               )
             ),
-            
+
             # Метрики
             tags$div(
               style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px;",
-              
+
               # Блок даты
               tags$div(
                 class = "metric-card",
@@ -949,7 +978,7 @@ server <- function(input, output, session) {
                   tags$div(style = "font-weight: 500;", format(as.POSIXct(commit$date, format = "%Y.%m.%d %H:%M:%S"), "%d.%m.%Y %H:%M:%S"))
                 )
               ),
-              
+
               # Блок файлов
               tags$div(
                 class = "metric-card",
@@ -960,7 +989,7 @@ server <- function(input, output, session) {
                   tags$div(style = "font-weight: 500; color: #0366d6;", commit$files_changed)
                 )
               ),
-              
+
               # Блок изменений
               tags$div(
                 class = "metric-card",
@@ -976,7 +1005,7 @@ server <- function(input, output, session) {
                 )
               )
             ),
-            
+
             # Сообщение коммита
             tags$div(
               style = "background: #f6f8fa; padding: 12px; border-radius: 6px; margin-bottom: 12px;",
@@ -986,11 +1015,11 @@ server <- function(input, output, session) {
                 tags$em(ifelse(nchar(commit$message) > 30, paste0(substr(commit$message, 1, 30), "..."), commit$message))
               )
             ),
-            
+
             # Метрики МГК
             tags$div(
               style = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px;",
-              
+
               # Блок z-score
               tags$div(
                 style = paste(
@@ -1010,7 +1039,7 @@ server <- function(input, output, session) {
                   tags$span(style = "margin-left: 5px;", z_color$label)
                 )
               ),
-              
+
               # Блок расстояния МГК
               tags$div(
                 style = paste(
@@ -1024,7 +1053,7 @@ server <- function(input, output, session) {
                 tags$div(style = "font-weight: bold; color: #b71c1c;", round(commit$distance, 2))
               )
             ),
-            
+
             # Блок отчёта
             tags$div(
               style = paste(
@@ -1089,7 +1118,7 @@ server <- function(input, output, session) {
       )
     }
   })
-  
+
   system_prompt <- read_file("server/data/prompt")
   schema <- read_json("server/data/schema.json")
   get_response <- function(patch, n_files) {
@@ -1115,11 +1144,11 @@ server <- function(input, output, session) {
       ),
       json_schema = schema
     )
-    
+
     response <- NULL
     attempt <- 1
     max_attempts <- 3
-    
+
     while (attempt <= max_attempts) {
       tryCatch({
         req <- request("https://llm.api.cloud.yandex.net/foundationModels/v1/completion") %>%
@@ -1128,37 +1157,37 @@ server <- function(input, output, session) {
             "Authorization" = paste("Api-Key", YANDEX_API_KEY)
           ) %>%
           req_body_json(prompt)
-        
-        response <- req %>% 
-          req_error(is_error = \(resp) FALSE) %>% 
+
+        response <- req %>%
+          req_error(is_error = \(resp) FALSE) %>%
           req_perform()
-        
+
         # Парсинг ответа
         if (resp_status(response) != 200) {
           return(paste("ERROR:", resp_status(response)))
         }
-        
+
         response_content <- resp_body_string(response)
         if (!jsonlite::validate(response_content)) {
           stop("Invalid JSON response")
         }
-        
+
         parsed_response <- fromJSON(response_content, simplifyVector = FALSE)
-        return(parsed_response$result$alternatives[[1]]$message$text %>% 
+        return(parsed_response$result$alternatives[[1]]$message$text %>%
                fromJSON(simplifyVector = FALSE))
       }, error = function(e) {
         attempt <<- attempt + 1
       })
     }
-    
+
     return("ERROR: max attempts")
   }
-  
+
   format_response <- function(data) {
     if (is.character(data) ) return(data)
-    
+
     report <- c(sprintf("**Отчёт** (`%s`):\n", data$status))
-    
+
     if (length(data$analysis) > 0) {
       # Группировка по уровням риска
       risks <- list(
@@ -1167,23 +1196,23 @@ server <- function(input, output, session) {
         INFO = list(),
         SAFE = list()
       )
-      
+
       for (item in data$analysis) {
         risks[[item$risk_level]] <- c(risks[[item$risk_level]], list(item))
       }
-      
+
       # Генерация секций для каждого уровня риска
       for (risk_level in names(risks)) {
         if (length(risks[[risk_level]]) > 0) {
           # Заголовок уровня риска с иконкой
           risk_icon <- switch(risk_level,
                               "CRITICAL" = "🔴",
-                              "WARNING" = "🟠", 
+                              "WARNING" = "🟠",
                               "INFO" = "🔵",
                               "SAFE" = "🟢")
-          
+
           report <- c(report, sprintf("\n%s **%s**", risk_icon, risk_level))
-          
+
           # Вывод каждого случая
           for (finding in risks[[risk_level]]) {
             report <- c(report,
@@ -1199,10 +1228,10 @@ server <- function(input, output, session) {
     } else {
       report <- c(report, "Опасные файлы не обнаружены")
     }
-    
+
     return(paste0(report, collapse = ""))
-  } 
-  
+  }
+
   format_report <- function(text) {
     text <- gsub("```r\n", "```\n", text, fixed = TRUE)
     text <- gsub("\n", "  \n", text)
@@ -1214,7 +1243,7 @@ server <- function(input, output, session) {
       str_replace_all("&lt;", "<") %>%
       str_replace_all("&gt;", ">")
   }
-  
+
   # Обработчик закрытия приложения
   session$onSessionEnded(function() {
     if (needs_restart) {
