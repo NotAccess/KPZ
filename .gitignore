@@ -2,9 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
-test.R
-KPZ.Rproj
-.Renviron
-*.db
-*.log
-*.wal
+*.Rproj
+/.quarto/
