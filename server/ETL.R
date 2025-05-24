@@ -5,22 +5,27 @@ library(duckdb)
 library(DBI)
 library(lubridate)
 
+# Получение GitHub токена из переменных окружения
 GITHUB_TOKEN <- Sys.getenv('GITHUB_TOKEN')
 
+# Функция для выполнения запросов к GitHub API
 github_api_get <- function(url) {
+  # Создание HTTP запроса с пользовательским агентом
   req <- request(url) %>%
     req_user_agent("ShinyApp") %>%
     req_error(is_error = \(resp) FALSE)
-  
+
+  # Добавление заголовка авторизации, если токен существует
   if (nzchar(GITHUB_TOKEN)) {
-    req <- req %>% 
+    req <- req %>%
       req_headers(Authorization = paste("token", GITHUB_TOKEN))
   }
-  
+
+  # Выполнение запроса
   response <- req %>% req_perform()
   status <- resp_status(response)
-  
-  # Обработка статусов
+
+  # Обработка различных статусных кодов ответа
   if (status == 204) {
     flog.warn("[INFO] Репозиторий пуст (204 No Content)")
     return(NULL)
@@ -59,6 +64,7 @@ github_api_get <- function(url) {
   return(response)
 }
 
+# Функция для получения репозиториев пользователя
 get_user_repos <- function(username, setProgress) {
   repos <- list()
   url <- paste0("https://api.github.com/users/", username, "/repos?per_page=100")
@@ -68,13 +74,15 @@ get_user_repos <- function(username, setProgress) {
   start_time <- Sys.time()
   setProgress(message = "🌐 Поиск репозиториев:", value = 0)
 
+  # Цикл постраничной загрузки репозиториев
   repeat {
     response <- github_api_get(url)
     if (is.null(response)) break
-    
+
     current_repos <- response %>% resp_body_json()
     repos <- c(repos, current_repos)
 
+    # Определение общего количества страниц (только на первой итерации)
     if (current_page == 1) {
       link_header <- resp_headers(response)$link
       if (!is.null(link_header) && grepl('rel="last"', link_header)) {
@@ -88,9 +96,11 @@ get_user_repos <- function(username, setProgress) {
 
     setProgress(detail = sprintf("%d", length(repos)))
 
+    # Проверка наличия следующей страницы
     link_header <- resp_headers(response)$link
     if (is.null(link_header) || !grepl('rel="next"', link_header)) break
-    
+
+    # Получение URL следующей страницы
     url <- regexpr('<https://[^>]+>; rel="next"', link_header) %>%
       regmatches(link_header, .) %>%
       gsub('<|>; rel="next"', '', .)
@@ -99,16 +109,18 @@ get_user_repos <- function(username, setProgress) {
 
   total_repos <- length(repos)
   if (total_repos == 0) return(NULL)
-  
+
+  # Обработка данных репозиториев
   start_process <- Sys.time()
   setProgress(message = "⚙️ Обработка репозиториев:", value = 0)
   repo_data <- map(seq_along(repos), function(i) {
     repo <- repos[[i]]
-    
-    remaining <- (Sys.time() - start_time) %>% 
-      as.numeric(units = "secs") %>% 
+
+    # Расчет оставшегося времени обработки
+    remaining <- (Sys.time() - start_time) %>%
+      as.numeric(units = "secs") %>%
       {. * (total_repos - i) / i}
-    
+
     setProgress(
       value = i / total_repos,
       detail = sprintf(
@@ -118,9 +130,11 @@ get_user_repos <- function(username, setProgress) {
       )
     )
 
+    # Получение данных о контрибьюторах
     contributors_response <- github_api_get(paste0("https://api.github.com/repos/", repo$full_name, "/contributors"))
     contributors_count <- if (!is.null(contributors_response)) length(resp_body_json(contributors_response)) else 0
 
+    # Формирование структуры данных репозитория
     list(
       username = username,
       avatar = current_repos$avatar_url,
@@ -144,21 +158,23 @@ get_user_repos <- function(username, setProgress) {
   return(repo_data)
 }
 
+# Функция для получения коммитов пользователя
 get_user_commits_df <- function(repos, setProgress = NULL, batch_size = 200, log_file='logs.log') {
 
   flog.info("\n-------- FUNCTION START: Commit processing initiated --------")
-  #Get variables
+
+  # Получение переменных окружения
   DUCK_DB <- Sys.getenv('DUCK_DB')
   COMMITS_TABLE <- Sys.getenv('COMMITS_TABLE')
   flog.trace("[VARS] Varribles of db loaded DB=%s, table=%s", DUCK_DB, COMMITS_TABLE)
-  
-  # Initialize DuckDB connection
+
+  # Инициализация подключения к DuckDB
   con <- dbConnect(duckdb(), paste0(DUCK_DB, ".db"))
   on.exit(dbDisconnect(con), add = TRUE)
-  
+
   flog.info("[DB_CONNECTED] Connected to DuckDB database")
-  
-  # Create table and index
+
+  # Создание таблицы и индекса
   dbExecute(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
       id VARCHAR,
       patch VARCHAR,
@@ -174,28 +190,31 @@ get_user_commits_df <- function(repos, setProgress = NULL, batch_size = 200, log
       branch VARCHAR
     )", COMMITS_TABLE))
   dbExecute(con, sprintf("CREATE INDEX IF NOT EXISTS idx_%s_id ON %s (id)", COMMITS_TABLE, COMMITS_TABLE))
-  
-  # Collect all commit SHAs first for accurate progress tracking
+
+  # Сбор всех SHA коммитов для точного отслеживания прогресса
   all_commits <- list()
   if (!is.null(repos)) {
     flog.info("[PAGES_PROCESS] Starting repository processing")
-    
+
     setProgress(message = "🌐 Поиск коммитов:", value = 0)
     for (repo in repos) {
-      
+
       repo_name <- repo$full_name
       flog.info("[REPO_START] Processing repository: %s", repo_name)
-      
+
+      # Получение списка веток репозитория
       branches_response <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/branches?per_page=100"))
       if (is.null(branches_response)) next
       branches <- resp_body_json(branches_response)
       flog.debug("[BRANCHES] Found %d branches in %s", length(branches), repo_name)
-      
+
+      # Обработка каждой ветки
       for (branch in branches) {
         branch_name <- branch$name
         url <- paste0("https://api.github.com/repos/", repo_name, "/commits?per_page=100&sha=", branch_name)
         flog.info("[BRANCH_START] Processing branch: %s (%s)", branch_name, repo_name)
-        
+
+        # Постраничная загрузка коммитов
         repeat {
           response <- github_api_get(url)
           if (is.null(response)) {
@@ -207,8 +226,8 @@ get_user_commits_df <- function(repos, setProgress = NULL, batch_size = 200, log
             flog.debug("[NO_COMMITS] No commits in branch %s", branch_name)
             break
           }
-          
-          # Collect commit references
+
+          # Сбор ссылок на коммиты
           new_commits <- lapply(commits, function(c) list(
             sha = c$sha,
             repo = repo_name,
@@ -216,35 +235,33 @@ get_user_commits_df <- function(repos, setProgress = NULL, batch_size = 200, log
           ))
           all_commits <- c(all_commits, new_commits)
           flog.trace("[SHAS_ADDED] Added %d SHAs from %s", length(new_commits), branch_name)
-          
-          # Update collection progress
-          
+
+          # Обновление прогресса сбора
           setProgress(detail = sprintf("%d", length(all_commits)))
-          
-          
-          # Pagination
+
+
+          # Пагинация
           link_header <- resp_headers(response)$link
           if (is.null(link_header) || !grepl('rel="next"', link_header)) break
-          url <- regmatches(link_header, regexpr('<https://[^>]+>; rel="next"', link_header)) |> 
+          url <- regmatches(link_header, regexpr('<https://[^>]+>; rel="next"', link_header)) |>
             gsub('<|>; rel="next"', '', x = _)
         }
       }
     }
   }
-  
+
   total_commits <- length(all_commits)
   if (total_commits == 0) return(NULL)
-  
-  # Get existing SHAs from database
-  
+
+  # Получение существующих SHA из базы данных
   existing_shas <- dbGetQuery(con, sprintf("SELECT DISTINCT id FROM %s", COMMITS_TABLE))$id
-  
-  # Initialize batch processing variables
+
+  # Инициализация переменных для пакетной обработки
   commits_list <- list()
   new_commits_batch <- list()
   batch_counter <- 0
-  
-  # Batch writing helper function
+
+  # Вспомогательная функция для записи пакета данных
   write_batch <- function() {
     if (length(new_commits_batch) > 0) {
       combined_batch <- do.call(rbind, new_commits_batch)
@@ -256,40 +273,42 @@ get_user_commits_df <- function(repos, setProgress = NULL, batch_size = 200, log
       flog.debug("DB_WRITE_ENDS")
     }
   }
-  
-  # Start processing phase
+
+  # Начало фазы обработки
   start_time <- Sys.time()
 
   setProgress(message = "⚙️ Обработка коммитов:", value = 0)
-  
-  
+
+  # Обработка каждого коммита
   for (i in seq_along(all_commits)) {
     commit <- all_commits[[i]]
     commit_sha <- commit$sha
     repo_name <- commit$repo
     branch_name <- commit$branch
-    
+
+    # Проверка наличия коммита в базе данных
     if (commit_sha %in% existing_shas) {
       flog.trace("[EXISTING_COMMIT] Commit %s already in database", substr(commit_sha, 1, 7))
-      # Retrieve existing data from DB
-      existing_data <- dbGetQuery(con, sprintf("SELECT * FROM %s WHERE id = '%s'", 
+      # Получение существующих данных из БД
+      existing_data <- dbGetQuery(con, sprintf("SELECT * FROM %s WHERE id = '%s'",
                                                COMMITS_TABLE, commit_sha))
       commits_list <- c(commits_list, list(existing_data))
     } else {
-      
+
       flog.trace("[NEW_COMMIT_START] Processing new commit: %s", substr(commit_sha, 1, 7))
-      # Process new commit
-      
+      # Обработка нового коммита
+
       commit_details <- github_api_get(paste0("https://api.github.com/repos/", repo_name, "/commits/", commit_sha))
       if (!is.null(commit_details)) {
         commit_data <- commit_details %>% resp_body_json()
       }
-      
+
+      # Обработка данных о файлах в коммите
       if (!is.null(commit_data$files) && length(commit_data$files) > 0) {
         file_data <- lapply(commit_data$files, function(file) {
           commit_date <- ymd_hms(commit_data$commit$author$date)
           commit_date_local <- with_tz(commit_date, tzone = Sys.timezone())
-          
+
           data.frame(
             id = commit_sha,
             patch = if (is.null(file$patch)) "NULL" else file$patch,
@@ -306,22 +325,21 @@ get_user_commits_df <- function(repos, setProgress = NULL, batch_size = 200, log
             stringsAsFactors = FALSE
           )
         })
-        
+
         new_commit_df <- do.call(rbind, file_data)
         if (!is.null(new_commit_df) && nrow(new_commit_df) > 0) {
           new_commits_batch <- c(new_commits_batch, list(new_commit_df))
           batch_counter <- batch_counter + 1
           existing_shas <- c(existing_shas, commit_sha)
-          
+
           if (batch_counter >= batch_size) {
             write_batch()
           }
         }
       }
     }
-    
-    # Update processing progress
-    
+
+    # Обновление прогресса обработки
     elapsed <- as.numeric(Sys.time() - start_time)
     remaining <- elapsed * (total_commits - i) / i
     setProgress(
@@ -330,20 +348,22 @@ get_user_commits_df <- function(repos, setProgress = NULL, batch_size = 200, log
                        i, total_commits,
                        format(.POSIXct(remaining, tz = "GMT"), "%H:%M:%S"))
     )
-    
+
   }
-  
-  # Write final batch
+
+  # Запись последнего пакета
   write_batch()
   flog.debug("[LAST_DATA_WAS_WRITTEN], Writing final batch of %s", batch_counter)
-  # Combine and return results
+
+  # Объединение и возврат результатов
   commits_df <- if (length(commits_list) > 0) do.call(rbind, commits_list) else NULL
   final_count <- if (!is.null(commits_df)) nrow(commits_df) else 0
-  
+
   flog.debug("[NY, WOT I WSE], Function completed. Total commits processe %s", final_count)
   return(commits_df)
 }
 
+# Функция для получения профиля пользователя
 get_user_profile <- function(username) {
   response <- github_api_get(paste0("https://api.github.com/users/", username))
   if (is.null(response)) return(NULL)
@@ -366,8 +386,8 @@ get_user_profile <- function(username) {
   )
 }
 
+# Функция для визуализации данных о активности (issues и forks), на основе репозиториев
 prepare_activity_data <- function(repos) {
-  # Визуализирует данные о forks и issues, на основе репозиториев
   if (is.null(repos)) {
     return(NULL)
   }
@@ -391,8 +411,8 @@ prepare_activity_data <- function(repos) {
   return(activity_data)
 }
 
+# Функция для визуализации данных о языках программирования
 prepare_language_data <- function(repos) {
-  # Визуализирует данные о использовании языков, на основе репозиториев
   if (is.null(repos)) {
     return(NULL)
   }
@@ -413,10 +433,11 @@ prepare_language_data <- function(repos) {
   return(language_data)
 }
 
+# Функция для подготовки данных heatmap коммитов
 prepare_commit_heatmap_data <- function(commits) {
   # Устанавливаем локаль на английскую для корректного определения дней недели
   Sys.setlocale("LC_TIME", "C")
-  
+
   commits %>%
     mutate(
       date = as.POSIXct(date, format = "%Y.%m.%d %H:%M:%S"),
@@ -442,9 +463,10 @@ prepare_commit_heatmap_data <- function(commits) {
     { Sys.setlocale("LC_TIME", ""); . }
 }
 
+# Функция для подготовки статистики коммитов
 prepare_commit_stats <- function(commits) {
   if (is.null(commits)) return(NULL)
-  
+
   commits %>%
     mutate(
       # Явное преобразование строки в дату
